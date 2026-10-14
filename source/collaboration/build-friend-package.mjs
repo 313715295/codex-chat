@@ -17,9 +17,8 @@ export async function buildFriendPackage(destination){
   }
  }
  await collect('skill/codex-chat-delegate');await collect('source/results-attachments-template');
- files.set('README.txt',await fs.readFile(path.join(root,'share-guide-attachments.txt')));
+ files.set('README.txt',await fs.readFile(path.join(root,'docs/getting-started.md')));
  for(const name of ['LICENSE','THIRD_PARTY_NOTICES.md','INSTALL_FOR_CODEX.md'])files.set(name,await fs.readFile(path.join(root,name)));
- files.set('首次使用.txt',await fs.readFile(path.join(root,'首次使用.txt')));
  files.set('Install.cmd',Buffer.from('@echo off\r\nsetlocal\r\nset "TASK_NODE=%ProgramFiles%\\nodejs\\node.exe"\r\nif not exist "%TASK_NODE%" (\r\n echo Node 24.18 or later 24.x x64 is required. Ask Codex to assist with the official installer.\r\n exit /b 1\r\n)\r\n"%TASK_NODE%" "%~dp0source\\collaboration\\install-package.mjs"\r\nexit /b %errorlevel%\r\n'));
  const hosting=JSON.parse(files.get('source/results-attachments-template/.openai/hosting.json').toString('utf8'));
  if(hosting.project_id||hosting.r2!=='BUCKET'||hosting.d1!=='DB')throw new Error('CLEAN_PRIVATE_ATTACHMENT_TEMPLATE_REQUIRED');
@@ -27,11 +26,11 @@ export async function buildFriendPackage(destination){
   if(/(^|\/)(\.env(?:\..*)?|results-connection\.json|collaboration\.json|INSTALLATION\.json|own-results-setup\.json)$|\.(pem|pfx|key)$/i.test(name))throw new Error('PRIVATE_FILE_IN_PACKAGE');
   if(/appgprj_[a-z0-9]+|plugin_asdk_app_[a-z0-9]+|https:\/\/[^\s"']+\.chatgpt\.site|C:[\\/]+Users[\\/]+[^\\/]+[\\/]/i.test(body.toString('utf8')))throw new Error('PERSONAL_IDENTITY_IN_PACKAGE:'+name);
  }
- const manifest={version:'0.3.4',ownership:'each user owns their account-private service',accountMappingIncluded:false,credentialsIncluded:false,friendEndToEndAcceptancePassed:false,
+ const manifest={version:'0.3.5',ownership:'each user owns their account-private service',accountMappingIncluded:false,credentialsIncluded:false,friendEndToEndAcceptancePassed:false,
  acceptance:{currentAccountRealChat:'passed',multiAccountLocal:'passed',multiAccountReal:'deferred_by_user',newAccountFirstSetup:'not_run',audioPerception:'not_run',imageAutomaticExport:'passed_current_account_real_chat',simpleTwoStageImage:'passed_installed_entry_current_account_real_chat_2026-10-15'},
  files:Object.fromEntries([...files].map(([n,b])=>[n,createHash('sha256').update(b).digest('hex')]))};
  files.set('PACKAGE-MANIFEST.json',Buffer.from(JSON.stringify(manifest,null,2)+'\n'));
  for(const [name,body]of files){const target=path.join(destination,name);await fs.mkdir(path.dirname(target),{recursive:true});await fs.writeFile(target,body,{flag:'wx'});}
- return {status:'built',version:'0.3.4',destination,fileCount:files.size,accountMappingIncluded:false,credentialsIncluded:false,friendEndToEndAcceptancePassed:false};
+ return {status:'built',version:'0.3.5',destination,fileCount:files.size,accountMappingIncluded:false,credentialsIncluded:false,friendEndToEndAcceptancePassed:false};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)buildFriendPackage(process.argv[2]).then(r=>console.log(JSON.stringify(r))).catch(e=>{console.error(e.message);process.exitCode=1;});

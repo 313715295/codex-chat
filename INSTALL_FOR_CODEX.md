@@ -1,6 +1,6 @@
 # Codex 安装入口
 
-先读取 README.md（分享包读 README.txt）及 skill/codex-chat-delegate/SKILL.md。使用用户已指定的安装位置、材料范围和实际 Chat 链接；不把安装目录默认当作材料目录。
+执行前读取 skill/codex-chat-delegate/SKILL.md。使用用户已指定的安装位置、材料范围和实际 Chat 链接；不把安装目录默认当作材料目录。用户说明见使用包 README.txt 或仓库 docs/getting-started.md。
 
 分享 ZIP 可由 Codex 核验并解压到新建的可写目录，无需用户事先解压。执行 source/collaboration/install-package.mjs --check，确认 Node 24.18 或以上的 24.x x64 与包内文件哈希，再执行同一安装入口。
 
