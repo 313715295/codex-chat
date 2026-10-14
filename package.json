@@ -1,0 +1,15 @@
+{
+  "name": "codex-chat",
+  "version": "0.3.3",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
+  "scripts": {
+    "test": "node scripts/test.mjs",
+    "build:package": "node scripts/release.mjs",
+    "check:public": "node scripts/check-public.mjs"
+  }
+}
