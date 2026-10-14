@@ -114,7 +114,7 @@ test('binding and installed entry use friend-local paths and do not overwrite an
   const base=await mkdtemp(join(tmpdir(),'collaboration-entry-'));
   try{
     const root=join(base,'materials');await mkdir(root);
-    const bound=await bindConversation('https://chatgpt.com/c/'+threadId,root,{base:join(base,'state')});assert.equal(bound.targetThreadId,threadId);
+    const bound=await bindConversation('https://chatgpt.com/c/'+threadId,root,{base:join(base,'state'),codexThreadId:'00000000-0000-4000-8000-000000000001'});assert.equal(bound.targetThreadId,threadId);
     assert.throws(()=>chatId('https://chatgpt.com/c/'+threadId+'?token=x'));
     const dest=join(base,'installed');const installed=await installEntry({destination:dest});assert.equal(installed.messageSent,false);assert.equal(installed.serviceStarted,false);
     assert.ok(new Function('return (\n'+await readFile(join(dest,'scripts/host-runtime.js'),'utf8')+'\n)')().delegateAndWait);

@@ -37,7 +37,7 @@ node scripts/release.mjs
 
 构建器先生成干净目录并检查个人配置，创建 SHA-256 文件清单，再生成 downloads 下的 ZIP 和外部校验值。ZIP 包含协作入口、skill、干净后台模板、许可证和首次使用说明，不包含 node_modules、历史 reader、个人状态或开发测试输出。
 
-打包使用 Windows PowerShell 和系统 .NET ZIP 支持，不需要额外 ZIP 程序。发布版本为 0.3.3；修改版本时同步安装/打包/插件清单与测试期望。
+打包使用 Windows PowerShell 和系统 .NET ZIP 支持，不需要额外 ZIP 程序。发布版本为 0.3.4；修改版本时同步安装/打包/插件清单与测试期望。
 
 源码 Install.cmd 仅更新已管理的本机 skill；使用包 Install.cmd 先验证 PACKAGE-MANIFEST.json。不可覆盖非本工具管理的已存在 skill。
 

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -21,8 +21,9 @@ test('export application name comes from the verified owner service, without uns
  title='another\n instruction';await host.verifyAccount();assert.equal(host.applicationName,undefined);
 });
 async function fixture(fn){
- const base=await mkdtemp(join(tmpdir(),'codex-chat-accounts-')),root=join(base,'materials'),state=join(base,'state');await mkdir(root);
- try{return await fn({base,root,state});}finally{assert.ok(resolve(base).startsWith(resolve(tmpdir())));await rm(base,{recursive:true,force:true});}
+ const temporaryRoot=await realpath(tmpdir());
+ const base=await mkdtemp(join(temporaryRoot,'codex-chat-accounts-')),root=join(base,'materials'),state=join(base,'state');await mkdir(root);
+ try{return await fn({base,root,state});}finally{assert.ok(resolve(base).startsWith(resolve(temporaryRoot)));await rm(base,{recursive:true,force:true});}
 }
 const bind=(state,root,c,chat)=>bindConversation('https://chatgpt.com/c/'+chat,root,{base:state,codexThreadId:source,accountId:c.accountId});
 const packet=p=>prepareDelegation({taskId:'account-test',goal:'synthetic review',directMaterials:[{path:'note.txt',wholeFile:true,text:'alpha\n'}]},p);

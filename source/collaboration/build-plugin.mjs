@@ -8,7 +8,7 @@ const packageRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 export async function buildPlugin(destination,{resultConnection=null,requireResultsConnection=false}={}){
   if(requireResultsConnection&&!resultConnection)throw new Error('REGISTERED_RESULTS_CONNECTION_REQUIRED');
   const connection=resultConnection?validateResultConnection(resultConnection):null;
-  const manifest={$schema:'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',name:'codex-chat-delegation',version:'0.3.3',description:'用户指令或适用项目规则允许 Chat 协作或文件收发时使用，传送材料、工具内等待并取回结果'};
+  const manifest={$schema:'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',name:'codex-chat-delegation',version:'0.3.4',description:'用户指令或适用项目规则允许 Chat 协作或文件收发时使用，传送材料、工具内等待并取回结果'};
   if(connection)manifest.extensions={'com.openai':{apps:'./.app.json'}};
   const files={
     'plugin.json':JSON.stringify(manifest,null,2)+'\n',

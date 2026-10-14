@@ -72,7 +72,7 @@ test('current share package is complete, excludes retired local service entries 
  const base=await mkdtemp(join(tmpdir(),'friend-files-package-'));
  try {
   const output=join(base,'package');const built=await buildFriendPackage(output);
-  assert.equal(built.version,'0.3.3');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
+  assert.equal(built.version,'0.3.4');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
   const manifest=JSON.parse(await readFile(join(output,'PACKAGE-MANIFEST.json'),'utf8'));
   assert.ok(manifest.files['source/results-attachments-template/build/sites-vite-plugin.ts']);
   assert.ok(manifest.files['source/results-attachments-template/build/connector-preview-plugin.mjs']);
