@@ -6,8 +6,9 @@
 
 ## 下载与首次使用
 
-- [Windows x64 使用包 v0.3.3](downloads/codex-chat-windows-x64-v0.3.3.zip)
-- [包的 SHA-256](downloads/SHA256SUMS.txt)
+- [Windows x64 使用包 v0.3.3](https://github.com/313715295/codex-chat/releases/download/v0.3.3/codex-chat-windows-x64-v0.3.3.zip)
+- [包的 SHA-256](https://github.com/313715295/codex-chat/releases/download/v0.3.3/SHA256SUMS.txt)
+- [正式版本页](https://github.com/313715295/codex-chat/releases/tag/v0.3.3)（仓库 downloads 目录也保留同一份包）
 - [首次安装与日常使用](docs/getting-started.md)
 - [交给 Codex 的安装说明](INSTALL_FOR_CODEX.md)
 
