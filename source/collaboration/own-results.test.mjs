@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,mkdtemp,rm,writeFile,mkdir} from 'node:fs/promises';
 import {dirname,join} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {tmpdir} from 'node:os';
 import {runInNewContext} from 'node:vm';
 import {buildFriendPackage} from './build-friend-package.mjs';
@@ -20,7 +20,7 @@ waitForDeployment:async s=>{events.push(['wait',s.deploymentId]);return {project
 test('new account creates exactly one private service and saves identity before source/publication',async()=>{
  const events=[];let created=0,got=0;
  const host={create:async()=>{created++;events.push(['create']);return {id:'fixture-project',source_repository_credential:{token:'fixture-source-secret'}};},
- getSite:async()=>{events.push(['get']);return got++===0?{...site(),current_live_url:null,mcp_connection:null}:site();},
+ getSite:async args=>{events.push(['get']);assert.equal(args.include_mcp_connection,got>0);return got++===0?{...site(),current_live_url:null,mcp_connection:null}:site();},
  credential:async()=>{throw Error('not needed');},
  publish:async s=>{events.push(['publish']);assert.equal(s.project_id,'fixture-project');return {project_id:s.project_id,id:'fixture-deployment',version_id:'fixture-version',status:'building'};}};
  const result=await api.ensureOwnResults({hosting:{d1:'DB',r2:null,capabilities:['mcp']},slug:'fixture-results',setupAuthorized:true},host,ioFixture(events));
@@ -49,8 +49,8 @@ test('local setup persists atomically and refuses replacing identity or saving s
 test('daily reuse uses exact owner project and performs no creation, push, installation or publication',async()=>{
  let gets=0;const events=[];
  const result=await api.ensureOwnResults({hosting:{project_id:'fixture-project'},ownerPrivateConfirmed:true},
- {getSite:async args=>{gets++;assert.equal(args.project_id,'fixture-project');return site();}},ioFixture(events));
- assert.equal(result.reused,true);assert.equal(gets,1);assert.deepEqual(events.map(x=>x[0]),['checkpoint']);
+ {getSite:async args=>{assert.equal(args.include_mcp_connection,gets>0);gets++;assert.equal(args.project_id,'fixture-project');return site();}},ioFixture(events));
+ assert.equal(result.reused,true);assert.equal(gets,2);assert.deepEqual(events.map(x=>x[0]),['checkpoint']);
 });
 test('uncertain creation, wrong owner and unconfirmed privacy stop without retry or changing access',async()=>{
  let calls=0;const host={create:async()=>{calls++;},getSite:async()=>{calls++;return {...site(),current_user_role:'editor'};}};
@@ -72,13 +72,23 @@ test('current share package is complete, excludes retired local service entries 
  const base=await mkdtemp(join(tmpdir(),'friend-files-package-'));
  try {
   const output=join(base,'package');const built=await buildFriendPackage(output);
-  assert.equal(built.version,'0.3.6');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
+  assert.equal(built.version,'0.3.7');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
   const manifest=JSON.parse(await readFile(join(output,'PACKAGE-MANIFEST.json'),'utf8'));
+  assert.equal(manifest.friendEndToEndAcceptancePassed,false);
+  assert.equal(manifest.acceptance.multiAccountReal,'deferred_by_user');
+  assert.equal(manifest.acceptance.newAccountFirstSetup,'partial_chat_system_error_blocked');
+  assert.ok(manifest.files['source/collaboration/pack-own-results.mjs']);
   assert.ok(manifest.files['source/results-attachments-template/build/sites-vite-plugin.ts']);
   assert.ok(manifest.files['source/results-attachments-template/build/connector-preview-plugin.mjs']);
   assert.ok(!Object.keys(manifest.files).some(p=>p.includes('/.sites-runtime/')));
   assert.ok(Object.keys(manifest.files).every(p=>!p.startsWith('source/reader/')&&!p.startsWith('skill/codex-chat-reader/')&&!p.endsWith('.exe')));
   assert.equal((await checkPackage(output)).verifiedFiles,Object.keys(manifest.files).length);
+  const installer=await import(pathToFileURL(join(output,'source/collaboration/install.mjs')).href);
+  const destination=join(base,'installed-skill');
+  const installed=await installer.installEntry({destination});
+  assert.equal(installed.serviceStarted,false);assert.equal(installed.messageSent,false);assert.equal(installed.permissionsChanged,false);
+  assert.equal(await readFile(join(destination,'scripts/pack-own-results.mjs'),'utf8'),await readFile(join(output,'source/collaboration/pack-own-results.mjs'),'utf8'));
+  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.7');
   await writeFile(join(output,'source/collaboration/prepare.mjs'),'tampered');
   await assert.rejects(checkPackage(output),/PACKAGE_FILE_HASH_MISMATCH/);
   await assert.rejects(buildFriendPackage(output),/NEW_PACKAGE_DIRECTORY_REQUIRED/);

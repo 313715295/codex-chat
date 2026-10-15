@@ -64,7 +64,7 @@ test('a verified shape packages the exact mapping without claiming consumer auth
   try{
     const reference=JSON.parse(JSON.stringify(api.connectionFromSite(site(),{projectId,expectedMcpUrl:mcpUrl})));
     const built=await buildPlugin(base,{resultConnection:reference,requireResultsConnection:true});
-    assert.equal(built.fileCount,18);assert.equal(built.registeredResultsConnectionIncluded,true);
+    assert.equal(built.fileCount,19);assert.equal(built.registeredResultsConnectionIncluded,true);
     const manifest=JSON.parse(await readFile(join(base,'plugin.json'),'utf8'));
     assert.deepEqual(manifest.extensions,{'com.openai':{apps:'./.app.json'}});
     assert.deepEqual(JSON.parse(await readFile(join(base,'.app.json'),'utf8')),

@@ -125,7 +125,8 @@ test('binding and installed entry use friend-local paths and do not overwrite an
 test('portable Codex plugin carries the executable entry and does not claim copied account connections',async()=>{
   const base=await mkdtemp(join(tmpdir(),'collaboration-plugin-'));
   try{
-    const built=await buildPlugin(base);assert.equal(built.fileCount,16);assert.equal(built.messageSent,false);
+    const built=await buildPlugin(base);assert.equal(built.fileCount,17);assert.equal(built.messageSent,false);
+    assert.ok((await readFile(join(base,'skills/codex-chat-delegate/scripts/pack-own-results.mjs'),'utf8')).includes('packOwnResults'));
     const manifest=JSON.parse(await readFile(join(base,'plugin.json'),'utf8'));assert.equal(manifest.name,'codex-chat-delegation');
     const status=JSON.parse(await readFile(join(base,'STATUS.json'),'utf8'));assert.equal(status.chatExtraSkillRequired,false);assert.equal(status.modelApiUsedDuringWait,false);assert.equal(status.friendEndToEndAcceptancePassed,false);
     const generatedApi=new Function('return (\n'+await readFile(join(base,'skills/codex-chat-delegate/scripts/host-runtime.js'),'utf8')+'\n)')();

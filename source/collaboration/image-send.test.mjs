@@ -44,6 +44,12 @@ test('a single prompt returns immediately on acknowledgement with no generation 
  const again=await api.delegateAndWait(f.packet,f.host,{...f.options,resume:out.state});assert.equal(again.status,'sent');assert.equal(f.messages.length,1);
 });
 
+test('a target system error blocks the image queue before sending',async()=>{
+ const f=fixture();f.host.readThread=async()=>({thread:{id:thread,kind:'chatgpt',status:{type:'systemError'}},turns:[]});
+ const out=await api.delegateAndWait(f.packet,f.host,f.options);
+ assert.equal(out.status,'blocked');assert.equal(out.errorCode,'TARGET_CHAT_SYSTEM_ERROR');assert.equal(f.messages.length,0);assert.deepEqual(f.releases,[{terminal:true}]);
+});
+
 test('several prompts wait for each matched completed turn and return as soon as the final prompt is sent',async()=>{
  const f=fixture({prompts:['Draw bridge','Draw mountain','Draw river']}),out=await api.delegateAndWait(f.packet,f.host,f.options);
  assert.equal(out.status,'sent');assert.equal(out.sentCount,3);assert.equal(out.wait.elapsedMs,4000);

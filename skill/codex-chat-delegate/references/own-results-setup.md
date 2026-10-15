@@ -8,11 +8,11 @@
 
 1. 在用户解压包的自有结果源码目录读取 .openai/hosting.json。附件版使用 source/results-attachments-template（D1=DB、R2=BUCKET），干净模板没有 project_id。既有自有源码的 ID 只在当前账号 owner 身份核实后复用；历史其他账号映射要保留并报告，不覆盖或拿来新建。第一次只把干净模板复制到新的本机可写 results-owned 目录，后续直接复用。
 2. 用 scripts/own-results-local.mjs 的 read 读取该自有源码目录的 hosting/state，加载 scripts/own-results-runtime.js；ensureOwnResults 通过当前宿主原生 create_site、get_site、create_source_repository_write_credential、save_version_and_deploy_private 完成编排。io.checkpoint 与 io.persistHosting 分别调用本地 helper 的 checkpoint/hosting：第三参数仅是程序生成的非敏感 JSON 的 base64，hosting 只传返回的 project_id；不得传凭据。helper 原子写入并禁止替换已有项目。checkpoint 在变更之前写入，persistHosting 收到创建结果立即调用。状态显示 creating 而没有项目 ID 时，先核对原创建结果；不能再次 create。发布状态不明时先核对既有版本/部署，不能重复发布。
-3. 新服务采用 owner-private，不改变访问受众。已有 ID 必须核对当前账号为 owner；私人受众不明时先核实，不能把 private 操作用作访问探测。首次初始化的授权覆盖此自有私人服务，不逐步骤重复问确认。不要请求 publish-on-push 实验窗口。
-4. syncSource 使用 Sites 官方 source helper 的真实 TTY：短期凭据只从当前账号的原生返回保留在内存，经隐藏 stdin 传入，不写文件、命令参数或日志。检查并安装锁定依赖；当前 Windows npm 启动器有路径问题时，可使用已核对的 npm JavaScript 入口。运行源码验证及构建，推送确切源提交。能生成构建包时传 archive；本地 packager 缺 Bash 时用官方 prepare-site-build.cjs 和系统 tar 创建包含 hosting/migrations 的同一提交构建包，预先核实 staging 目录边界；不能打包才使用受支持的 remote-build fallback，不安装额外大框架。
+3. 新服务采用 owner-private。发布前 get_site 只读取元数据，不能指定 include_mcp_connection=true；发布成功后才索要连接信息。已有 ID 核对当前账号为 owner，并先确认私人受众。首次初始化授权覆盖本账号私人服务，不逐步骤问确认，不请求 publish-on-push 实验窗口。
+4. syncSource 使用 Sites 官方 source helper 的真实 TTY：短期凭据只在内存，经隐藏 stdin 传入，不写文件、参数或日志。安装锁定依赖；Windows npm 启动器有路径问题时使用已核对的 npm JavaScript 入口。验证、构建并推送确切源码。本地 packager 缺 Bash 时，在确认源码已保存后，用 scripts/pack-own-results.mjs <自有源码目录> <Sites插件根目录> <全新构建包路径> 打包同一提交；它调用官方 prepare-site-build.cjs，保留 dist 外层、hosting、归属信息和 migrations。不能本地打包才使用受支持的 remote-build fallback。
 5. waitForDeployment 在工具程序内等待已有部署的终态，空状态不逐轮请求模型，不自动创建第二份服务；失败或安全拒绝就返回明确错误。
-6. 加载 host-runtime.js，调用 discoverAccount(tools, ALL_TOOLS, {projectId})，用原生 owner-private 记录及独立只读 MCP 探针核实账号、服务内身份、固定地址和实际工具前缀。保存其白名单返回值并用 prepare.mjs account-register 登记；account-bind 将该账号的实际 Chat 和授权目录保存在本 Codex 名下。账号配置共存，不覆盖全局旧映射；不存 auth_client_id、token 或短期源凭据，不放进通用分享包。缺少 channel 字段时，先将该用户自有服务更新到包内源码，不借用其他服务。
-7. 核对实际工具可用。平台发布可能自动提供应用工具；get_site 的 plugin_id 本身不证明已经连接。需要安装时使用当前平台返回的精确 plugin_id 与受支持的插件安装入口。实际 publish_assignment/get_task_result 和 Chat submit_task_result 跑通后才写安装通过。
+6. 加载 host-runtime.js，调用 connectAccount(tools, ALL_TOOLS, {projectId})，先探测实际工具与身份。返回 refresh_required 时，在下一次 functions.exec 中刷新工具清单并重查；仍缺连接时传 requestConnection:true，程序仅请求该 owner-private 服务的精确 plugin_id。把返回的 connectionAttempted 传给下一次调用，连接请求最多一次。包括 Already installed 在内的回执均需再刷新和探测，不能当作连接成功或重新建服务的理由。needs_connection 才引导本人到“插件 → 个人 → 由你创建”安装或连接该应用；先核实服务是否需要升级，不改审批设置。新会话恢复前核对已有安装记录，不重复建议安装已连接或正在等待确认的应用。
+7. connected 返回的是原生 owner-private 记录和独立只读 MCP 探针核实的账号、服务内身份、固定地址及工具前缀。保存其白名单 connection，用 prepare.mjs account-register、account-bind 登记实际 Chat 和材料目录。配置按账号共存，不存 auth_client_id、token 或短期凭据。服务发布不等于连接完成，实际任务与 Chat 正式结果往返通过后才写完整安装验收通过。
 8. 以后启动时调用同一 ensureOwnResults，只查询已有 owner 项目并复用固定结果地址，不创建、安装依赖、推送或重新发布。任务正文仍走原生桌面消息。
 
 ## 手动协助

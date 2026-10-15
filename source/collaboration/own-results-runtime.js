@@ -49,12 +49,15 @@
     } else {
       requireValue(typeof projectId==='string' && projectId.length>0,'EXACT_EXISTING_PROJECT_ID_REQUIRED');
     }
-    let site=unpack(await host.getSite({project_id:projectId,include_mcp_connection:true}));
+    // An unpublished Site rejects MCP connection discovery. Read metadata first;
+    // request connection details only after a successful publication exists.
+    let site=unpack(await host.getSite({project_id:projectId,include_mcp_connection:false}));
     requireValue(site.id===projectId && site.current_user_role==='owner','OWN_ACCOUNT_OWNER_REQUIRED');
     requireValue(state.ownerPrivateConfirmed===true || input.ownerPrivateConfirmed===true,
       'PRIVATE_AUDIENCE_MUST_BE_CONFIRMED');
     // Reuse a published service. No dependency install, push, deploy, or new create.
-    if (site.status==='active' && site.current_live_url && site.mcp_connection) {
+    if (site.status==='active' && site.current_live_url) {
+      site=unpack(await host.getSite({project_id:projectId,include_mcp_connection:true}));
       const connection=safeConnection(site,projectId);
       await save({phase:'ready',projectId,ownerPrivateConfirmed:true});
       return {status:'ready',connection,reused:true,accountConnectionVerified:false,permissionsChanged:false};

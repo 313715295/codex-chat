@@ -27,6 +27,13 @@ async function fixture(fn){
 }
 const bind=(state,root,c,chat)=>bindConversation('https://chatgpt.com/c/'+chat,root,{base:state,codexThreadId:source,accountId:c.accountId});
 const packet=p=>prepareDelegation({taskId:'account-test',goal:'synthetic review',directMaterials:[{path:'note.txt',wholeFile:true,text:'alpha\n'}]},p);
+
+test('delegation identifies the verified result endpoint when connected applications share a display name',()=>fixture(async({root,state})=>{
+ await registerAccount(state,ca);const p=packet(await bind(state,root,ca,chatA));
+ const prompt=api.buildPrompt(p,'22222222-2222-4222-8222-222222222222');
+ assert.ok(prompt.includes(ca.mcpUrl));assert.ok(prompt.includes(ca.toolPrefix+'submit_task_result'));
+ assert.ok(!prompt.includes(ca.principalId));assert.ok(!prompt.includes(cb.mcpUrl));
+}));
 test('A to B to A retains each Chat and root for the same Codex; packets pin identities and namespaces',()=>fixture(async({base,root,state})=>{
  await registerAccount(state,ca,{alias:'A'});await registerAccount(state,cb,{alias:'B'});
  const pa=packet(await bind(state,root,ca,chatA)),other=join(base,'b-materials');await mkdir(other);
@@ -70,6 +77,54 @@ test('identity discovery uses the native private owner and independently matches
  const inventory=Object.keys(tools).map(name=>({name}));assert.deepEqual(await api.discoverAccount(tools,inventory,{projectId:ca.projectId}),ca);
  tools[ca.toolPrefix+'get_task_result']=async a=>({status:'not_found',...a,channel:{...channel(ca),mcpUrl:cb.mcpUrl}});
  await assert.rejects(api.discoverAccount(tools,inventory,{projectId:ca.projectId}),/ACCOUNT_CHANNEL_NOT_CONNECTED_OR_UPGRADE_REQUIRED/);
+});
+test('first connection refreshes delayed discovery and reuses an independently verified installed channel without installation',async()=>{
+ let requests=0;
+ const tools={mcp__codex_apps__sites_get_site:async()=>site(ca),mcp__codex_apps__plugin_management_suggest_plugins:async()=>{requests++;}};
+ assert.equal((await api.connectAccount(tools,[],{projectId:ca.projectId})).status,'refresh_required');
+ // Metadata alone is insufficient while the actual functions are absent.
+ const inventory=[{name:ca.toolPrefix+'get_task_result'},{name:ca.toolPrefix+'publish_assignment'}];
+ assert.equal((await api.connectAccount(tools,inventory,{projectId:ca.projectId})).status,'refresh_required');
+ tools[ca.toolPrefix+'publish_assignment']=async()=>assert.fail('must not publish');
+ tools[ca.toolPrefix+'get_task_result']=async a=>({status:'not_found',...a,channel:channel(ca)});
+ const ready=await api.connectAccount(tools,inventory,{projectId:ca.projectId,requestConnection:true});
+ assert.equal(ready.status,'connected');assert.deepEqual(ready.connection,ca);assert.equal(requests,0);
+});
+test('Already installed refreshes once; a fresh successful probe is required and install is never repeated',async()=>{
+ let requests=0;
+ const tools={mcp__codex_apps__sites_get_site:async()=>site(ca),mcp__codex_apps__plugin_management_suggest_plugins:async args=>{
+  requests++;assert.deepEqual(args.plugin_ids,[ca.registeredMcpId]);
+  return {isError:true,content:[{type:'text',text:'Already installed (already_installed)'}]};
+ }};
+ const refresh=await api.connectAccount(tools,[],{projectId:ca.projectId,requestConnection:true});
+ assert.equal(refresh.status,'refresh_required');assert.equal(refresh.connectionAttempted,true);
+ assert.equal(refresh.connection,undefined);assert.equal(refresh.requestReportedError,true);
+ const waiting=await api.connectAccount(tools,[],{projectId:ca.projectId,connectionAttempted:true,requestConnection:true});
+ assert.equal(waiting.status,'needs_connection');assert.equal(requests,1);
+ tools[ca.toolPrefix+'publish_assignment']=async()=>assert.fail('must not publish');
+ tools[ca.toolPrefix+'get_task_result']=async a=>({status:'not_found',...a,channel:channel(ca)});
+ const ready=await api.connectAccount(tools,Object.keys(tools).map(name=>({name})),{projectId:ca.projectId,connectionAttempted:true});
+ assert.equal(ready.status,'connected');assert.deepEqual(ready.connection,ca);assert.equal(requests,1);
+});
+test('unavailable or rejected connection returns a precise manual action without claiming success or changing permissions',async()=>{
+ const tools={mcp__codex_apps__sites_get_site:async()=>site(ca)};
+ const absent=await api.connectAccount(tools,[],{projectId:ca.projectId,requestConnection:true});
+ assert.equal(absent.status,'needs_connection');assert.equal(absent.registeredMcpId,ca.registeredMcpId);assert.equal(absent.connection,undefined);
+ let requests=0;tools.mcp__codex_apps__plugin_management_suggest_plugins=async()=>{requests++;return {isError:true,content:[{type:'text',text:'not_eligible'}]};};
+ const requested=await api.connectAccount(tools,[],{projectId:ca.projectId,requestConnection:true});
+ assert.equal(requested.status,'refresh_required');
+ const final=await api.connectAccount(tools,[],{projectId:ca.projectId,connectionAttempted:requested.connectionAttempted});
+ assert.equal(final.status,'needs_connection');assert.equal(final.connection,undefined);assert.equal(requests,1);
+});
+test('wrong owner and ambiguous actual channels block before any connection request',async()=>{
+ let requests=0;const tools={mcp__codex_apps__sites_get_site:async()=>site(cb),mcp__codex_apps__plugin_management_suggest_plugins:async()=>{requests++;}};
+ await assert.rejects(api.connectAccount(tools,[],{projectId:ca.projectId,requestConnection:true}),/REGISTERED_RESULTS_NOT_READY/);
+ tools.mcp__codex_apps__sites_get_site=async()=>({...site(ca),current_user_role:'editor'});
+ await assert.rejects(api.connectAccount(tools,[],{projectId:ca.projectId,requestConnection:true}),/OWN_PRIVATE_ACCOUNT_REQUIRED/);
+ tools.mcp__codex_apps__sites_get_site=async()=>site(ca);
+ for(const prefix of [ca.toolPrefix,cb.toolPrefix]){tools[prefix+'publish_assignment']=async()=>{};tools[prefix+'get_task_result']=async a=>({status:'not_found',...a,channel:channel(ca)});}
+ await assert.rejects(api.connectAccount(tools,Object.keys(tools).map(name=>({name})),{projectId:ca.projectId,requestConnection:true}),/AMBIGUOUS_ACCOUNT_CHANNEL/);
+ assert.equal(requests,0);
 });
 test('wrong native account stops before publishing or sending, and a different connected principal cannot read results',()=>fixture(async({root,state})=>{
  await registerAccount(state,ca);const p=packet(await bind(state,root,ca,chatA));let mutations=0;

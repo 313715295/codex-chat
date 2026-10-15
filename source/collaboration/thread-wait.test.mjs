@@ -98,6 +98,20 @@ test('a previously sent packet without a new turn anchor is recovered by fallbac
 
 const resultFirst=options=>({...options,waitStrategy:'result',completionFallback:true,pollIntervalMs:30000});
 
+test('a target system error stops before publishing or sending a new task',async()=>{
+ const f=fixture();f.host.readThread=async()=>({thread:{id:thread,kind:'chatgpt',status:{type:'systemError'}}});
+ const out=await api.delegateAndWait(f.packet,f.host,resultFirst(f.options));
+ assert.equal(out.status,'blocked');assert.equal(out.errorCode,'TARGET_CHAT_SYSTEM_ERROR');assert.equal(f.messages.length,0);assert.equal(out.state.assignmentReceipt,null);
+});
+
+test('five-minute fallback reports a target system error even when the acknowledged message has no visible turn',async()=>{
+ const f=fixture({readyAt:Infinity}),read=f.host.readThread;
+ f.host.readThread=async()=>f.messages.length?{thread:{id:thread,kind:'chatgpt',status:{type:'systemError'}},turns:[]}:read();
+ const out=await api.delegateAndWait(f.packet,f.host,resultFirst(f.options));
+ assert.equal(out.status,'blocked');assert.equal(out.errorCode,'TARGET_CHAT_SYSTEM_ERROR');assert.equal(out.wait.elapsedMs,300000);
+ assert.equal(f.messages.length,1);assert.equal(out.metrics.fallbackChecks,1);assert.equal(out.metrics.automaticResultMessagesSent,0);
+});
+
 test('result-first waiting retrieves a ready outcome without probing the Chat turn before five minutes',async()=>{
  const f=fixture({busy:true,readyAt:100000}),out=await api.delegateAndWait(f.packet,f.host,resultFirst(f.options));
  assert.equal(out.status,'completed');assert.deepEqual(f.reads,[10000]);assert.equal(out.metrics.threadProbes,0);
