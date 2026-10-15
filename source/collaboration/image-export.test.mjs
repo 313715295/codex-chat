@@ -5,7 +5,10 @@ import {prepareDelegation,packetDigest} from './prepare.mjs';
 const api=new Function('return ('+await readFile(new URL('./host-runtime.js',import.meta.url),'utf8')+')')();
 const thread='11111111-1111-4111-8111-111111111111',receipt='22222222-2222-4222-8222-222222222222',id='att_'+'a'.repeat(48);
 function fixture({busy=false,unchanged=false,otherTask=false,uploading=false,loseAck=false,legacy=false,turnOffset=0,wrappedPrompt=false}={}){
- const packet=prepareDelegation({taskId:'image-fixture',goal:'Generate original image and return original file',context:'Internal transport details',criteria:['Export and submit original'],imagePrompt:'生成一张横版武侠高手对决图：云雾山巅古桥，两位剑客交锋，电影光影，无文字。',kind:'design',receiveAttachments:true,imageGeneration:true},{schemaVersion:1,targetThreadId:thread,authorizedRoot:'fixture-root',workspaceId:'fixture-workspace'});
+ // Historical packet compatibility only; the public entry no longer runs auto-return.
+ const packet=prepareDelegation({taskId:'image-fixture',goal:'Generate original image and return original file',context:'Internal transport details',criteria:['Export and submit original'],imagePrompt:'生成一张横版武侠高手对决图：云雾山巅古桥，两位剑客交锋，电影光影，无文字。',kind:'design',imageGeneration:true},{schemaVersion:1,targetThreadId:thread,authorizedRoot:'fixture-root',workspaceId:'fixture-workspace'});
+ packet.imagePrompt=packet.imagePrompts[0];delete packet.imagePrompts;delete packet.imageDelivery;
+ packet.attachments={root:'fixture-root',requests:[]};packet.packetId=packetDigest(packet);
  if(legacy){delete packet.imagePrompt;packet.packetId=packetDigest(packet);}
  let time=10000,original='',result=null,deleted=false;const messages=[],states=[];
  const meta={attachmentId:id,taskId:packet.assignment.taskId,revision:'r1',assignmentReceipt:receipt,purpose:'result',fileName:'image.png',mimeType:'image/png',sizeBytes:8,sha256:'a'.repeat(64),readable:true};
@@ -20,6 +23,18 @@ test('first image message contains only creative content; a separate bound expor
  assert.ok(f.messages[1].includes('不生成'));assert.ok(f.messages[1].includes(receipt));
  assert.equal(f.messages[0],f.packet.imagePrompt);assert.ok(!f.messages[0].includes(receipt));assert.ok(!f.messages[0].includes(f.packet.assignment.taskId));assert.ok(!f.messages[0].includes('submit_task_result'));
  const again=await api.delegateAndWait(f.packet,f.host,{...f.options,resume:out.state});assert.equal(again.status,'completed');assert.equal(f.messages.length,2);
+});
+
+test('the shared thread monitor detects generation and export turns before downloading the original',async()=>{
+ const f=fixture();let checks=0;
+ f.host.readThread=async()=>{
+  if(!f.messages.length)return {thread:{id:thread,kind:'chatgpt'}};
+  checks++;const m=f.states.at(-1).turnMonitor,start=m.messageSentAt/1000;
+  return {thread:{id:thread,kind:'chatgpt',status:{type:'idle'},updatedAt:start+2},turns:[{id:'turn-'+f.messages.length,status:'completed',startedAt:start,completedAt:start+2,items:[{type:'userMessage',content:[{type:'text',text:f.messages.at(-1)}]}]}]};
+ };
+ const out=await api.delegateAndWait(f.packet,f.host,{...f.options,waitStrategy:'thread',timeoutMs:200000});
+ assert.equal(out.status,'completed');assert.equal(f.messages.length,2);assert.equal(out.metrics.automaticExportMessagesSent,1);
+ assert.equal(out.downloads.length,1);assert.equal(out.cleanup.pending.length,0);assert.equal(out.metrics.fallbackChecks,0);assert.ok(checks>=2);
 });
 test('image export names the verified application while the generation prompt remains creative only',async()=>{
  const f=fixture();f.host.applicationName='Owner Private Results';
@@ -37,8 +52,8 @@ test('lost export acknowledgement remains uncertain and resume never repeats it'
  const f=fixture({loseAck:true}),out=await api.delegateAndWait(f.packet,f.host,f.options);assert.equal(out.status,'blocked');assert.equal(out.state.imageExport.delivery,'uncertain');assert.equal(f.messages.length,2);
  const resumed=await api.delegateAndWait(f.packet,f.host,{...f.options,resume:out.state});assert.equal(resumed.status,'delivery_uncertain');assert.equal(f.messages.length,2);
 });
-test('image generation must explicitly enable original-file transport; text completion alone is rejected',()=>{
- assert.throws(()=>prepareDelegation({goal:'image',kind:'design',imageGeneration:true},{schemaVersion:1,targetThreadId:thread,authorizedRoot:'root',workspaceId:'w'}),/IMAGE_RESULT_TRANSPORT_REQUIRED/);
+test('new requests reject automatic image return; a historical completed result still requires a real file',()=>{
+ assert.throws(()=>prepareDelegation({goal:'image',kind:'design',imageGeneration:true,imagePrompt:'Draw',receiveAttachments:true},{schemaVersion:1,targetThreadId:thread,authorizedRoot:'root',workspaceId:'w'}),/IMAGE_MANUAL_DOWNLOAD_ONLY/);
  const f=fixture();assert.throws(()=>api.verifyResult({status:'found',taskId:f.packet.assignment.taskId,revision:'r1',receipt, result:{taskId:f.packet.assignment.taskId,revision:'r1',assignmentReceipt:receipt,status:'completed',summary:'image path',findings:[],materialsRead:[],limitations:[],requests:[]}},f.packet,receipt),/IMAGE_RESULT_FILE_REQUIRED/);
 });
 test('missing original send-window state stops before another message',async()=>{
@@ -54,7 +69,7 @@ test('previously sent legacy image packets retain their metadata-based completio
 });
 test('a separate creative prompt is pinned in the packet; missing prompts or undeclared delivery of input files fail locally',()=>{
  const f=fixture(),changed={...f.packet,imagePrompt:f.packet.imagePrompt+' different'};assert.notEqual(packetDigest(changed),f.packet.packetId);
- const profile={schemaVersion:1,targetThreadId:thread,authorizedRoot:'root',workspaceId:'w'},request={goal:'Return image',kind:'design',imageGeneration:true,receiveAttachments:true};
+ const profile={schemaVersion:1,targetThreadId:thread,authorizedRoot:'root',workspaceId:'w'},request={goal:'Send image request',kind:'design',imageGeneration:true};
  assert.throws(()=>prepareDelegation(request,profile),/IMAGE_PROMPT_REQUIRED/);
  assert.throws(()=>prepareDelegation({...request,imagePrompt:'Create scene',directMaterials:[{path:'reference.txt',wholeFile:true,text:'reference'}]},profile),/IMAGE_PROMPT_REQUIRES_PREPROVIDED_MATERIALS/);
 });

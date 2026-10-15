@@ -93,15 +93,20 @@ export function prepareDelegation(input,profile,{attachmentMetadata=[]}={}){
   if(input.imageGeneration!==undefined){
     insist(typeof input.imageGeneration==='boolean','INVALID_IMAGE_GENERATION_MODE');
     if(input.imageGeneration){
-      insist(kind==='design'&&input.receiveAttachments===true,'IMAGE_RESULT_TRANSPORT_REQUIRED');
-      insist(typeof input.imagePrompt==='string'&&input.imagePrompt.trim(),'IMAGE_PROMPT_REQUIRED');
+      insist(kind==='design','INVALID_IMAGE_GENERATION_MODE');
+      insist(input.receiveAttachments!==true,'IMAGE_MANUAL_DOWNLOAD_ONLY');
+      insist(input.imagePrompt===undefined||input.imagePrompts===undefined,'ONE_IMAGE_PROMPT_FORM_REQUIRED');
+      const prompts=input.imagePrompts??(input.imagePrompt===undefined?[]:[input.imagePrompt]);
+      insist(Array.isArray(prompts)&&prompts.length>=1&&prompts.length<=16&&
+        prompts.every(p=>typeof p==='string'&&p.trim()),'IMAGE_PROMPT_REQUIRED');
       insist(!assignment.files.length&&!directMaterials.length,'IMAGE_PROMPT_REQUIRES_PREPROVIDED_MATERIALS');
-      packet.imageGeneration=true;packet.imagePrompt=text(input.imagePrompt,8192,true);
+      packet.imageGeneration=true;packet.imageDelivery='manual';packet.imagePrompts=prompts.map(p=>text(p,8192,true));
     }
   }
-  if(input.imagePrompt!==undefined){
+  if(input.imagePrompt!==undefined||input.imagePrompts!==undefined){
     insist(input.imageGeneration===true,'IMAGE_PROMPT_REQUIRES_IMAGE_MODE');
   }
+  if(input.imageDelivery!==undefined)insist(input.imageGeneration===true&&input.imageDelivery==='manual','IMAGE_MANUAL_DOWNLOAD_ONLY');
   packet.packetId=packetDigest(packet);insist(Buffer.byteLength(JSON.stringify(packet))<=1048576,'DELEGATION_PACKET_TOO_LARGE');return packet;
 }
 

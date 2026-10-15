@@ -20,6 +20,8 @@
     let selected=packetPath;
     if(requestPath)selected=JSON.parse(await command([nodePath,preparePath,'prepare',requestPath])).packetPath;
     const job=JSON.parse(await command([nodePath,preparePath,'load',selected],30000));
+    const imageSendOnly=job.packet.imageDelivery==='manual';
+    if(job.packet.imageGeneration&&!imageSendOnly)fail('LEGACY_IMAGE_RETURN_DISABLED');
     async function readModule(name){
       const r=await measured.exec_command({cmd:'Get-Content -LiteralPath '+quote(scriptRoot+'/'+name)+' -Raw',max_output_tokens:22000});
       if(r.exit_code!==0||r.session_id)fail('ENTRY_MODULE_READ_FAILED');return new Function('return (\n'+r.output+'\n)')();
@@ -40,8 +42,10 @@
       if(!sent&&s.delivery==='sent'){sent=true;options.onProgress?.({stage:'sent'});}
       if(!exported&&s.imageExport?.delivery==='sent'){exported=true;options.onProgress?.({stage:'automatic-image-export'});}
     };
-    const outcome=await api.delegateAndWait(job.packet,api.bindHost(measured,inventory,job.packet.connection),{
-      deliveryAuthorized:options.deliveryAuthorized,resume:job.resume,timeoutMs:options.timeoutMs,pollIntervalMs:options.pollIntervalMs,
+    const outcome=await api.delegateAndWait(job.packet,api.bindHost(measured,inventory,job.packet.connection,{imageSendOnly}),{
+      deliveryAuthorized:options.deliveryAuthorized,resume:job.resume,timeoutMs:options.timeoutMs,pollIntervalMs:options.pollIntervalMs??30000,
+      waitStrategy:options.waitStrategy??(job.packet.imageGeneration?'thread':'result'),completionFallback:options.completionFallback??!job.packet.imageGeneration,
+      fallbackIntervalMs:options.fallbackIntervalMs,threadProbeIntervalMs:options.threadProbeIntervalMs,
       execution:api.bindExecution(measured,{nodePath,preparePath,packetPath:selected}),checkpoint,
       ...(attachment?{attachments:{api:attachment,host:attachment.bind(measured,inventory,job.packet.connection?.toolPrefix,job.packet.connection),io,outputRoot}}:{})
     });

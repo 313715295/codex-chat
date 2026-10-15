@@ -1,6 +1,6 @@
 ---
 name: codex-chat-delegate
-description: 用户指令或适用项目规则允许 Chat 协作或文件收发时使用，通过桌面消息和私人结果/附件通道传送材料，在工具程序内等待并取回结果。
+description: 用户指令或适用项目规则允许 Chat 协作或文件收发时使用，通过桌面消息和私人通道收发材料与结果；可按需逐条发送生图指令，图片由用户自行下载。
 ---
 
 # Codex ↔ Chat 协作
@@ -10,7 +10,8 @@ description: 用户指令或适用项目规则允许 Chat 协作或文件收发�
 ## 材料
 
 - 必要正文直接发送；片段注明整文件版本和准确行范围。
-- 原文件按 [文件入口](references/attachments.md) 收发；只需接收生成文件时设 receiveAttachments=true；图片生成设 imageGeneration=true，并以 imagePrompt 提供具体画面要求；第一条只发该正文，结束后第二条单独导出。
+- 原文件按 [文件入口](references/attachments.md) 收发；只需接收生成文件时设 receiveAttachments=true。
+- 用户选择生图时设 imageGeneration=true，用 imagePrompt 提供一条画面要求，或 imagePrompts 提供多条。一次只发送一条，上一轮结束后再补发下一张的生图指令；图片由用户在 Chat 查看和下载。不设 receiveAttachments，不追加导出或催交。队列在同一程序内等待，最后一条送达即返回，不把送达记作生图成功。
 
 Chat 返回 needs_materials 时，Codex 在授权目录内补充必要正文或附件，以同一 taskId 的新 revision 继续；重新提供后续仍需要的材料，旧版短期附件可能已清理。无法确定材料、超出范围或缺项重复且无新信息时报告原因。
 
@@ -19,11 +20,11 @@ Chat 返回 needs_materials 时，Codex 在授权目录内补充必要正文或�
 ## 执行
 
 1. 用 prepare.mjs show 读取本 Codex 会话的账号、私人通道、Chat 和材料目录，原生 read_thread 核对目标。新账号按 [通道初始化](references/own-results-setup.md) 核实并保存；已配置账号用 account-switch 切换，保留各账号的绑定。每个 Codex 同时绑定一个 Chat，不同绑定可共用材料目录；待完成任务阻止切换。详见 [宿主入口](references/host-entry.md)。
-2. 按宿主入口调用 job-entry.js，程序完成准备、执行锁、登记任务、发送与等待。图片任务先只发具体生成内容，核对该原消息与发送时间窗口及结束线索，再发最多一次原图导出指令；任务字段和上传/结果要求放在第二条。
+2. 按宿主入口调用 job-entry.js。普通审核、规划、文字设计优先由程序查询 get_task_result，每五分钟仍无结果时才用 read_thread 核对漏交；不以 Chat 停止工作代替正式结果。生图只走原生消息，保留账号、目标和执行锁检查，不登记远程结果任务、不调用附件通道。
 3. 核对任务、版本和回执；回传文件下载后校验完整字节与哈希，清理短期附件，再继续当前任务。completed 只覆盖实际完成范围；cleanup.pending 或 executionCleanup.pending 如实报告。
-4. 超时加载原包和状态续等；sending/uncertain 不盲目重发，待完成任务不插入新任务或盲目解除锁。
+4. 超时加载原包和状态续等；sending/uncertain 不盲目重发，待完成任务不插入新任务或盲目解除锁。图片队列报告已发送/总条数，保留未发送项；旧自动取回图片包不续跑。
 
-空查询、状态核对、图片导出续发和文件传输都在同一工具程序内处理，不逐轮请求模型；exec 返回运行中的 cell ID 时只用 wait 续取，不额外循环 read_thread 或读取空结果。工具宿主续取仍可能产生 Codex 用量，不能承诺整个会话零 token。程序不提供常驻后台或闲置会话唤醒。
+空查询、状态核对、图片队列和文件传输留在同一工具程序内，不把空结果交给模型判断或另开查询循环。exec 返回运行中的 cell ID 时只用 wait 续取；需要按宿主要求报告进度时保持简短，不附加检查。skill 不能阻止宿主续取时的模型调用；统计用量须包含这些响应，不能把“程序未调用模型 API”说成“整个等待零模型消耗”。程序不提供常驻后台或闲置会话唤醒。
 
 ## 连接与异常
 
