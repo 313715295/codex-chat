@@ -8,6 +8,8 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {describe} from './attachment-local.mjs';
 import {sourceThreadId,bindingPath,readBinding,saveBinding,readTarget,saveTarget,listTargets,removeTarget,unbind,acquireExecution,finishExecution,pauseExecution,resumeExecution,registerAccount,listAccounts,switchAccount} from './bindings.mjs';
 import {validateResultConnection} from './result-connection.mjs';
+import {stable,packetDigest} from './task-storage.mjs';
+export {packetDigest} from './task-storage.mjs';
 
 export const stateRoot=join(process.env.LOCALAPPDATA??homedir(),'CodexChatReader');
 const sha=text=>createHash('sha256').update(text).digest('hex');
@@ -22,8 +24,6 @@ function text(v,max=32768,required=false){
   insist(typeof v==='string'&&v.isWellFormed()&&!v.includes('\0')&&Buffer.byteLength(v)<=max&&(!required||v.length>0),'INVALID_TEXT');return v;
 }
 function paths(values){insist(Array.isArray(values)&&values.length<=256&&values.every(validPath)&&new Set(values).size===values.length,'INVALID_PATHS');return [...values];}
-function stable(v){if(Array.isArray(v))return '['+v.map(stable).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';return JSON.stringify(v);}
-export function packetDigest(packet){const {packetId,...body}=packet;return sha(stable(body));}
 export function chatId(value){
   insist(typeof value==='string'&&/^https:\/\/chatgpt\.com\/c\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value),'EXACT_CHAT_CONVERSATION_URL_REQUIRED');
   return value.slice(value.lastIndexOf('/')+1);
@@ -122,7 +122,9 @@ export async function bindConversation(url,authorizedRoot,{base=stateRoot,title=
   return asTarget?saveTarget(base,profile):saveBinding(base,profile);
 }
 export async function loadForThread(packetPath,{base=stateRoot,codexThreadId=sourceThreadId()}={}){
-  const packet=await readJson(packetPath);insist(packet.packetId===packetDigest(packet),'PACKET_CHANGED');
+  let packet;try{packet=await readJson(packetPath);}catch(e){
+    if(e.code==='ENOENT'){try{insist((await readJson(packetPath+'.state.json')).type!=='codex-chat-receipt','TASK_ARCHIVED_WITH_RECEIPT');}catch(prior){if(prior.message==='TASK_ARCHIVED_WITH_RECEIPT')throw prior;}}throw e;
+  }insist(packet.packetId===packetDigest(packet),'PACKET_CHANGED');
   insist((packet.materialRequests===undefined||Array.isArray(packet.materialRequests)&&packet.materialRequests.length===0)&&
     (packet.localReader===undefined||packet.localReader===null),'RETIRED_LOCAL_ACCESS_CONFIGURATION');
   insist(packet.source?.routeTarget===undefined||packet.source.routeTarget===true,'INVALID_ROUTE_TARGET');
@@ -168,13 +170,16 @@ async function main(args){
     const rel=relative(profile.authorizedRoot,runs);insist(rel.startsWith('..')||isAbsolute(rel),'STATE_MUST_BE_OUTSIDE_AUTHORIZED_ROOT');
     await mkdir(runs,{recursive:true});
     const packetPath=join(runs,packet.assignment.taskId+'-'+packet.assignment.revision+'-'+packet.packetId.slice(0,12)+'.json');
+    try{insist((await readJson(packetPath+'.state.json',262144)).type!=='codex-chat-receipt','TASK_ARCHIVED_WITH_RECEIPT');}catch(e){if(e.code!=='ENOENT')throw e;}
     try{await writeFile(packetPath,JSON.stringify(packet,null,2)+'\n',{flag:'wx'});}catch(e){if(e.code!=='EEXIST')throw e;insist(packetDigest(await readJson(packetPath))===packet.packetId,'EXISTING_PACKET_MISMATCH');}
     console.log(JSON.stringify({status:'prepared',packetPath,statePath:packetPath+'.state.json',taskId:packet.assignment.taskId,revision:packet.assignment.revision,packetId:packet.packetId,messageSent:false}));return;
   }
   if(args[0]==='load'&&args.length===2){
     const {packet}=await loadForThread(args[1]);
     let resume=null;try{resume=await readJson(args[1]+'.state.json',262144);}catch(e){if(e.code!=='ENOENT')throw e;}
-    console.log(JSON.stringify({packet,resume,packetPath:resolve(args[1]),statePath:resolve(args[1])+'.state.json'}));return;
+    insist(resume?.type!=='codex-chat-receipt','TASK_ARCHIVED_WITH_RECEIPT');
+    const storageModuleSha256=sha(await readFile(new URL('./task-storage.mjs',import.meta.url)));
+    console.log(JSON.stringify({packet,resume,packetPath:resolve(args[1]),statePath:resolve(args[1])+'.state.json',cacheBase:stateRoot,storageModuleSha256}));return;
   }
   if(args[0]==='claim'&&args.length===2){const job=await loadForThread(args[1]);console.log(JSON.stringify(await acquireExecution(stateRoot,job.sourceThreadId,job.packet)));return;}
   if(args[0]==='pause'&&args.length===2){const job=await loadForThread(args[1]);console.log(JSON.stringify(await pauseExecution(stateRoot,job.sourceThreadId,job.packet)));return;}

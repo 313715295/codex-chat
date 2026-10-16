@@ -50,7 +50,7 @@ export async function installEntry({installationDirectory=localRoot(),skillDirec
   await mkdir(destination,{recursive:true});
   try{const existing=JSON.parse(await readFile(marker,'utf8'));if(existing.managedBy!==managedBy)throw new Error('EXISTING_INSTALLATION_NOT_OWNED');}
   catch(e){if(e.code!=='ENOENT')throw e;}
-  const record={schemaVersion:1,managedBy,version:'0.3.12',packageRoot,scriptRoot:info.scriptRoot,nodePath:process.execPath,skillRequired:false};
+  const record={schemaVersion:1,managedBy,version:'0.3.13',packageRoot,scriptRoot:info.scriptRoot,nodePath:process.execPath,skillRequired:false};
   const temporary=join(destination,'.installation-'+process.pid+'-'+Date.now()+'.tmp');
   await writeFile(temporary,JSON.stringify(record,null,2)+'\n',{flag:'wx'});await rename(temporary,marker);
   const legacy=retireLegacy?await retireLegacySkill({installationDirectory:destination,skillDirectory}):{status:'preserved_until_entry_verified'};

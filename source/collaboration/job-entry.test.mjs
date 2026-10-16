@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const entry=new Function('return ('+await readFile(new URL('./job-entry.js',import.meta.url),'utf8')+')')();
-function fixture({resume=false,oversized=false,imageGeneration=false,imageSendOnly=false}={}){
+function fixture({resume=false,oversized=false,imageGeneration=false,imageSendOnly=false,largeRecord=false}={}){
  const commands=[],bridges=[],patches=[];
  const packet={...(imageSendOnly?{}:{attachments:{}}),connection:{toolPrefix:'test_'},...(imageGeneration?{imageGeneration:true}:{}),...(imageSendOnly?{imageGeneration:true,imageDelivery:'manual'}:{})};
- const job={packet,statePath:'C:/test/state.json',resume:resume?{delivery:'sent'}:null};
- const core='({bindHost:(t,i,c,o)=>o,bindExecution:()=>({}),delegateAndWait:async(packet,host,options)=>{await options.checkpoint({delivery:"sent"});if(packet.imageDelivery==="manual")return {status:"sent",imageSendOnly:host.imageSendOnly,hasAttachmentIO:!!options.attachments};await options.attachments.io.appendChunk({},'+JSON.stringify({dataBase64:'a'.repeat(oversized?65000:55000)})+');return {status:"completed",didRequestModel:false,waitStrategy:options.waitStrategy,completionFallback:options.completionFallback,pollIntervalMs:options.pollIntervalMs};}})';
- const tools={exec_command:async args=>{commands.push(args.cmd);return {exit_code:0,output:args.cmd.startsWith('Get-Content')?(args.cmd.includes('attachment-host-runtime.js')?'({bind:()=>({})})':core):JSON.stringify(args.cmd.includes("'prepare'")?{packetPath:'C:/test/packet.json'}:job)};},apply_patch:async p=>{patches.push(p);return {};},mcp__node_repl__js:async args=>{bridges.push(args.code);return {content:[{type:'text',text:args.code.includes('appendChunk')?'{}':'{"ready":true}'}]};}};
+ const job={packet,statePath:'C:/test/state.json',cacheBase:'C:/test/cache',storageModuleSha256:'a'.repeat(64),resume:resume?{delivery:'sent'}:null};
+ const core='({bindHost:(t,i,c,o)=>o,bindExecution:()=>({}),delegateAndWait:async(packet,host,options)=>{await options.checkpoint({delivery:"sent"});if(packet.imageDelivery==="manual")return {status:"sent",imageSendOnly:host.imageSendOnly,hasAttachmentIO:!!options.attachments};await options.attachments.io.appendChunk({},'+JSON.stringify({dataBase64:'a'.repeat(oversized?65000:55000)})+');return {status:"completed",didRequestModel:false,result:{summary:'+JSON.stringify(largeRecord?'中'.repeat(40000):'fixture')+'},waitStrategy:options.waitStrategy,completionFallback:options.completionFallback,pollIntervalMs:options.pollIntervalMs};}})';
+ const tools={exec_command:async args=>{commands.push(args.cmd);return {exit_code:0,output:args.cmd.startsWith('Get-Content')?(args.cmd.includes('attachment-host-runtime.js')?'({bind:()=>({})})':core):JSON.stringify(args.cmd.includes("'prepare'")?{packetPath:'C:/test/packet.json'}:job)};},apply_patch:async p=>{patches.push(p);return {};},mcp__node_repl__js:async args=>{bridges.push(args.code);return {content:[{type:'text',text:args.code.includes('collaborationTaskStorage[')?'{"status":"saved","recordPath":"C:/test/out/outcome.json"}':args.code.includes('appendChunk')?'{}':'{"ready":true}'}]};}};
  const options={scriptRoot:"C:/tool's/scripts",outputRoot:'C:/test/out',deliveryAuthorized:true,...(resume?{packetPath:'C:/test/packet.json'}:{requestPath:'C:/test/request.json'})};
  for(const name of ['mcp__codex_app__read_thread','mcp__codex_app__send_message_to_thread','mcp__codex_apps__sites_get_site'])tools[name]=async()=>{};
  return {tools,options,commands,bridges,patches};
@@ -16,7 +16,9 @@ test('one program loads dependencies internally, initializes file IO and records
  const f=fixture(),result=await entry.run(f.tools,[],f.options);
  assert.equal(result.outcome.status,'completed');assert.equal(result.metrics.waitProgramModelAPICalls,0);
  assert.equal(f.commands.filter(c=>c.includes("'prepare'")).length,1);assert.ok(f.commands.every(c=>c.includes("tool''s")));
- assert.equal(f.bridges.length,2);assert.ok(f.bridges.every(c=>entry.utf8Bytes(c)<=64000));assert.equal(f.patches.length,2);
+ assert.ok(f.bridges.some(c=>c.includes('task-storage.mjs')));assert.ok(f.bridges.every(c=>entry.utf8Bytes(c)<=64000));assert.equal(f.patches.length,0);
+ assert.ok(f.bridges.some(c=>c.includes('?sha256='+'a'.repeat(64))));
+ assert.ok(f.bridges.some(c=>c.includes('["saveState"]')));assert.equal(result.recordPath,'C:/test/out/outcome.json');
 });
 test('resume uses the existing packet and never prepares a second task',async()=>{
  const f=fixture({resume:true});await entry.run(f.tools,[],f.options);assert.equal(f.commands.filter(c=>c.includes("'prepare'")).length,0);
@@ -26,12 +28,18 @@ test('ordinary jobs retain result polling; new images bypass attachment IO and h
  const f=fixture(),normal=await entry.run(f.tools,[],f.options);
  assert.equal(normal.outcome.waitStrategy,'result');assert.equal(normal.outcome.completionFallback,true);assert.equal(normal.outcome.pollIntervalMs,30000);
  const g=fixture({imageSendOnly:true}),image=await entry.run(g.tools,[],g.options);
- assert.equal(image.outcome.status,'sent');assert.equal(image.outcome.imageSendOnly,true);assert.equal(image.outcome.hasAttachmentIO,false);assert.equal(g.bridges.length,0);
+ assert.equal(image.outcome.status,'sent');assert.equal(image.outcome.imageSendOnly,true);assert.equal(image.outcome.hasAttachmentIO,false);assert.ok(g.bridges.every(c=>!c.includes('collaborationFiles[')));
  const legacy=fixture({imageGeneration:true});await assert.rejects(entry.run(legacy.tools,[],legacy.options),/LEGACY_IMAGE_RETURN_DISABLED/);assert.equal(legacy.bridges.length,0);
 });
 test('an oversized local file bridge is refused before invoking the tool',async()=>{
- const f=fixture({oversized:true});await assert.rejects(entry.run(f.tools,[],f.options),/LOCAL_FILE_BRIDGE_CODE_LIMIT/);assert.equal(f.bridges.length,1);
+ const f=fixture({oversized:true});await assert.rejects(entry.run(f.tools,[],f.options),/LOCAL_FILE_BRIDGE_CODE_LIMIT/);assert.ok(f.bridges.every(c=>!c.includes('appendChunk')));
  assert.equal(entry.utf8Bytes('中文🙂'),10);
+});
+
+test('large result records stay inside the local bridge budget and do not create patch files',async()=>{
+ const f=fixture({largeRecord:true});const out=await entry.run(f.tools,[],f.options);
+ assert.equal(out.outcome.result.summary.length,40000);assert.ok(f.bridges.some(c=>c.includes('collaborationTaskBuffers.set')));
+ assert.ok(f.bridges.every(c=>entry.utf8Bytes(c)<=64000));assert.equal(f.patches.length,0);
 });
 
 test('without the authenticated desktop bridge entry fails before local preparation or network side effects',async()=>{
@@ -50,7 +58,7 @@ function batchFixture({sameChat=false,otherAccount=false,failJob=false,withAttac
    calls.push(args.cmd);if(args.cmd.startsWith('Get-Content'))return {exit_code:0,output:args.cmd.includes('attachment-host-runtime.js')?'({bind:()=>({})})':core};
    const i=args.cmd.includes('packet1')?1:0;return {exit_code:0,output:JSON.stringify({packet:packets[i],resume:null,statePath:'C:/states/'+i+'.json'})};
  },apply_patch:async()=>({})};
- tools.mcp__node_repl__js=async()=>{bridgeActive++;bridgeConcurrent=Math.max(bridgeConcurrent,bridgeActive);await new Promise(r=>setTimeout(r,2));bridgeActive--;return {content:[{type:'text',text:'{}'}]};};
+ tools.mcp__node_repl__js=async args=>{bridgeActive++;bridgeConcurrent=Math.max(bridgeConcurrent,bridgeActive);await new Promise(r=>setTimeout(r,2));bridgeActive--;return {content:[{type:'text',text:args.code.includes('collaborationTaskStorage[')?JSON.stringify({status:'saved',recordPath:args.code.includes('packet1')?'C:/output1/outcome.json':'C:/output0/outcome.json'}):'{}'}]};};
  for(const name of ['mcp__codex_app__read_thread','mcp__codex_app__send_message_to_thread','mcp__codex_apps__sites_get_site'])tools[name]=async()=>{};
  tools.mcp__codex_app__send_message_to_thread=async()=>{messageActive++;messageConcurrent=Math.max(messageConcurrent,messageActive);await new Promise(r=>setTimeout(r,2));messageActive--;return {isError:false};};
  const options={scriptRoot:'C:/scripts',deliveryAuthorized:true,jobs:[0,1].map(i=>({packetPath:'C:/packet'+i+'.json',outputRoot:'C:/output'+i}))};
@@ -77,7 +85,7 @@ test('two Chat jobs really overlap and a failed peer does not discard the comple
 test('concurrent Chat file jobs share one serialized local bridge and keep distinct outcome paths',async()=>{
  const f=batchFixture({withAttachments:true});
  try{const r=await entry.runMany(f.tools,[],f.options);assert.equal(r.status,'completed');assert.equal(f.bridgeConcurrent,1);
-   assert.notEqual(r.jobs[0].recordPath,r.jobs[1].recordPath);assert.equal(r.metrics.toolCalls.mcp__node_repl__js,4);
+   assert.notEqual(r.jobs[0].recordPath,r.jobs[1].recordPath);
  }finally{delete globalThis.batchTestHook;}
 });
 test('desktop sends are serialized while the two jobs still wait concurrently',async()=>{

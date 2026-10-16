@@ -72,7 +72,7 @@ test('current share package is complete, excludes retired local service entries 
  const base=await mkdtemp(join(tmpdir(),'friend-files-package-'));
  try {
   const output=join(base,'package');const built=await buildFriendPackage(output);
-  assert.equal(built.version,'0.3.12');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
+  assert.equal(built.version,'0.3.13');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
   const manifest=JSON.parse(await readFile(join(output,'PACKAGE-MANIFEST.json'),'utf8'));
   assert.equal(manifest.friendEndToEndAcceptancePassed,false);
   assert.equal(manifest.acceptance.multiAccountReal,'deferred_by_user');
@@ -90,7 +90,7 @@ test('current share package is complete, excludes retired local service entries 
   const installed=await installer.installEntry({installationDirectory:destination,skillDirectory:join(base,'no-skill')});
   assert.equal(installed.serviceStarted,false);assert.equal(installed.messageSent,false);assert.equal(installed.permissionsChanged,false);
   assert.equal(installed.scriptRoot,join(output,'source/collaboration'));
-  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.12');
+  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.13');
   assert.ok(Object.keys(manifest.files).every(p=>!p.startsWith('skill/')&&!p.startsWith('skills/')));
   assert.ok(manifest.files['docs/codex/requests.md']);
   // Exercise the actually installed helpers; exporting a function alone is not acceptance.

@@ -36,6 +36,8 @@ text({status:report.outcome.status, summary:report.outcome.result?.summary,
 
 默认单次 10 分钟、最多 15 分钟，可设置 timeoutMs。所有空检查留在程序内，没有闲置事件唤醒；宿主续取仍可能触发模型响应。运行中的 cell 只用 functions.wait 续取。
 
+本地恢复记录由程序在关键事件时原子写入，空等不每分钟重写，也不使用 apply_patch。入口需要本地 Node 文件桥接，缺失时在发送前失败。完成并清理成功的完整缓存保留 7 天，下次启动自动在当前 Codex 缓存内压缩为回执；不会重发归档任务。暂停及异常任务、未知完成状态的旧记录、最终文件和报告保留。需要恢复时使用未归档的原 packetPath，不通过重建旧请求绕过归档标记。
+
 超时用返回的原 packetPath 续等，不重发；sending/uncertain 保持不确定。确需补材料时沿用 taskId 并新建 revision。systemError 或工具缺失保留现场并报告阶段，不放宽认证、哈希、目录或回执检查。completed 只覆盖实际范围；生图 sent 仅为送达。
 
 需要暂停后切换时，先结束 waiter，再 pause <原包>。resume <原包> 恢复原任务；多目标任务恢复自己的路由，不替换其他待办和默认 Chat。旧单目标包保留原语义，恢复会恢复原绑定。暂停继续保留账号、Chat、目录与通道，不代表成功、不撤回远端消息；新任务不能抢占暂停的 Chat。schema 1/2 首次正常写入迁移到 3，保留旧账号、绑定与暂停记录。

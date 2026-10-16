@@ -568,7 +568,6 @@
         await save();
       }
       stage = 'waiting';
-      let lastWaitCheckpoint=now();
       if(monitorTurns&&state.turnMonitor.lastFallbackAt===null)state.turnMonitor.lastFallbackAt=now();
       // All not_found results stay here. No empty lookup invokes a model.
       while (now() < deadline) {
@@ -593,7 +592,6 @@
           if(exported)return await settle(exported);
         }
         stage='waiting';
-        if(now()-lastWaitCheckpoint>=60000){await save();lastWaitCheckpoint=now();}
         let interval=waitStrategy==='thread'?threadProbeIntervalMs:pollIntervalMs;
         if(monitorTurns)interval=Math.min(interval,Math.max(1,fallbackIntervalMs-(now()-state.turnMonitor.lastFallbackAt)));
         const pause = Math.min(interval,deadline-now());

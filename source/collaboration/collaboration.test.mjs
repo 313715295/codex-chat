@@ -62,6 +62,15 @@ test('timeout persists sent binding and resume retrieves the result without repu
   const g=fixture(p,{responses:[found(p)]});const resumed=await api.delegateAndWait(p,g.host,{...g.options,resume:timed.state});
   assert.equal(resumed.status,'completed');assert.deepEqual(g.calls.map(c=>c.role),['get']);
 });
+
+test('five minutes of empty waiting add no heartbeat writes while send receipts remain recoverable',async()=>{
+  const p=packet(),f=fixture(p);
+  const out=await api.delegateAndWait(p,f.host,{...f.options,timeoutMs:300000,pollIntervalMs:30000});
+  assert.equal(out.status,'timeout');assert.ok(out.metrics.resultLookups>=10);
+  assert.deepEqual(f.states.map(s=>s.delivery),['not_sent','sending','sent']);
+  const g=fixture(p,{responses:[found(p)]});const resumed=await api.delegateAndWait(p,g.host,{...g.options,resume:f.states.at(-1)});
+  assert.equal(resumed.status,'completed');assert.deepEqual(g.calls.map(c=>c.role),['get']);
+});
 test('unknown message acknowledgement is persisted and never blindly resent',async()=>{
   const p=packet(),f=fixture(p,{sendError:true});const first=await api.delegateAndWait(p,f.host,f.options);
   assert.equal(first.state.delivery,'uncertain');const g=fixture(p);const resumed=await api.delegateAndWait(p,g.host,{...g.options,resume:first.state});

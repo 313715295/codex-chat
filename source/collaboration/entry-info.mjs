@@ -6,7 +6,7 @@ const scriptRoot=dirname(fileURLToPath(import.meta.url)),packageRoot=resolve(scr
 export async function entryInfo({hostBundle=false}={}){
   const entrySource=await readFile(join(scriptRoot,'job-entry.js'),'utf8');
   const entry=new Function('return (\n'+entrySource+'\n)')();
-  const info={...entry.describe(),version:'0.3.12',skillRequired:false,scriptRoot,packageRoot,
+  const info={...entry.describe(),version:'0.3.13',skillRequired:false,scriptRoot,packageRoot,
     guides:{requests:join(packageRoot,'docs/codex/requests.md'),setup:join(packageRoot,'docs/codex/own-results-setup.md'),host:join(packageRoot,'docs/codex/host-entry.md')}};
   return hostBundle?{info,entrySource}:info;
 }

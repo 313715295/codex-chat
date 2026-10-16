@@ -39,9 +39,15 @@ node scripts/release.mjs
 
 构建器先生成干净目录并检查个人配置，创建 SHA-256 文件清单，再生成 downloads 下的 ZIP 和外部校验值。ZIP 包含协作程序、调用指南、干净后台模板、许可证和首次使用说明，不包含独立 skill，不包含 node_modules、历史 reader、个人状态或开发测试输出。
 
-打包使用 Windows PowerShell 和系统 .NET ZIP 支持，不需要额外 ZIP 程序。发布版本为 0.3.12；修改版本时同步安装/打包/插件清单与测试期望。推送对应 v 标签后，仓库 CI 先检查源码和后端构建，再核验已提交的 ZIP 与哈希，最后通过 GitHub Actions 临时令牌发布相同使用包；不在本机导出发布凭据。
+打包使用 Windows PowerShell 和系统 .NET ZIP 支持，不需要额外 ZIP 程序。发布版本为 0.3.13；修改版本时同步安装/打包/插件清单与测试期望。推送对应 v 标签后，仓库 CI 先检查源码和后端构建，再核验已提交的 ZIP 与哈希，最后通过 GitHub Actions 临时令牌发布相同使用包；不在本机导出发布凭据。
 
 源码 Install.cmd 登记本机程序位置；使用包 Install.cmd 先验证 PACKAGE-MANIFEST.json。确认插件入口可用后，用 --retire-legacy-skill 自动备份并移除旧发现入口；保留兼容脚本及账号任务状态，不处理其他工具的 skill。
+
+## 本地任务缓存
+
+仅在关键事件保存恢复状态，分块和空查询不产生新 JSON 文件。完成且清理确认的缓存保留 7 天，下次运行时在当前 Codex 缓存内压缩为小回执，最终文件和 outcome.json 保留。异常、暂停和没有新版完成证据的旧记录不自动删除；没有后台清理定时器，不处理云端文字记录或开发验收目录。
+
+诊断预览可在对应 Codex 环境运行 `node source/collaboration/task-storage.mjs cleanup`；加 `--apply` 才应用相同规则。程序与执行占用共享锁，逐个验证任务包、范围和完成证据，只删除受管理缓存中的完整任务包；不递归删除材料或输出目录。
 
 ## 开源检查
 

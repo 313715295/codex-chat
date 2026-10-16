@@ -111,7 +111,7 @@ function tasksIn(store){
   return [...Object.entries(store.activeTasks).map(([id,task])=>({id,task,profile:store.bindings[id]})),
     ...Object.entries(store.routedTasks).flatMap(([id,tasks])=>Object.values(tasks).map(entry=>({id,...entry})))];
 }
-async function mutate(base,change){
+async function mutate(base,change,{write=true}={}){
   await mkdir(base,{recursive:true});const lock=join(base,'bindings.lock');let handle;
   const deadline=Date.now()+2000;
   while(!handle){
@@ -122,13 +122,15 @@ async function mutate(base,change){
   try{
     await handle.writeFile(JSON.stringify({lockId,pid:process.pid})+'\n');
     const store=await readStore(base),value=await change(store);validate(store);
-    await writeFile(temp,JSON.stringify(store,null,2)+'\n',{flag:'wx'});await rename(temp,bindingPath(base));return value;
+    if(write){await writeFile(temp,JSON.stringify(store,null,2)+'\n',{flag:'wx'});await rename(temp,bindingPath(base));}return value;
   }finally{
     await handle.close();await rm(temp,{force:true});
     // A crash leaves an explicit lock for inspection; never steal it by age.
     const owner=JSON.parse(await readFile(lock,'utf8'));insist(owner.lockId===lockId,'BINDING_LOCK_CHANGED');await rm(lock);
   }
 }
+// Cleanup holds the same lock as claims, without rewriting account or task bindings.
+export async function withBindingSnapshot(base,read){return mutate(base,read,{write:false});}
 export async function readBinding(base,id=sourceThreadId()){
   id=sourceThreadId(id);const store=await readStore(base),profile=store.bindings[id];
   insist(profile,'COLLABORATION_NOT_BOUND_FOR_THREAD');

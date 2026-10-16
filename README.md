@@ -2,7 +2,7 @@
 
 供 Codex 使用的消息与文件传输工具：向指定的桌面端 ChatGPT 会话发送请求和必要材料，再取回文字结果或原文件。做什么、怎样处理、是否取回，由使用者决定；审核、规划、设计和生图都是用法示例。
 
-**[下载 Windows x64 使用包 v0.3.12](https://github.com/313715295/codex-chat/releases/download/v0.3.12/codex-chat-windows-x64-v0.3.12.zip)** · [版本与校验值](https://github.com/313715295/codex-chat/releases/tag/v0.3.12)
+**[下载 Windows x64 使用包 v0.3.13](https://github.com/313715295/codex-chat/releases/download/v0.3.13/codex-chat-windows-x64-v0.3.13.zip)** · [版本与校验值](https://github.com/313715295/codex-chat/releases/tag/v0.3.13)
 
 把 ZIP 交给 Codex，说明安装位置、允许发送的材料目录和目标 Chat 会话名。Codex 按 [使用指南](docs/getting-started.md) 安装并配置你的私人通道；需要本人登录或平台授权时会明确引导。ZIP 内 README 与该指南相同。
 
