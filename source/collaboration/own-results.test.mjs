@@ -72,7 +72,7 @@ test('current share package is complete, excludes retired local service entries 
  const base=await mkdtemp(join(tmpdir(),'friend-files-package-'));
  try {
   const output=join(base,'package');const built=await buildFriendPackage(output);
-  assert.equal(built.version,'0.3.9');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
+  assert.equal(built.version,'0.3.10');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
   const manifest=JSON.parse(await readFile(join(output,'PACKAGE-MANIFEST.json'),'utf8'));
   assert.equal(manifest.friendEndToEndAcceptancePassed,false);
   assert.equal(manifest.acceptance.multiAccountReal,'deferred_by_user');
@@ -90,7 +90,7 @@ test('current share package is complete, excludes retired local service entries 
   const installed=await installer.installEntry({destination});
   assert.equal(installed.serviceStarted,false);assert.equal(installed.messageSent,false);assert.equal(installed.permissionsChanged,false);
   assert.equal(await readFile(join(destination,'scripts/pack-own-results.mjs'),'utf8'),await readFile(join(output,'source/collaboration/pack-own-results.mjs'),'utf8'));
-  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.9');
+  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.10');
   // Exercise the actually installed helpers; exporting a function alone is not acceptance.
   const installedBindings=await import(pathToFileURL(join(destination,'scripts/bindings.mjs')).href);
   const installedPrepare=await import(pathToFileURL(join(destination,'scripts/prepare.mjs')).href);

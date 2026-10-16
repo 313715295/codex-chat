@@ -13,31 +13,34 @@ const core=new Function('return (\n'+await fs.readFile(path.join(here,'host-runt
 const api=new Function('return (\n'+await fs.readFile(path.join(here,'attachment-host-runtime.js'),'utf8')+'\n)')();
 const threadId='11111111-1111-4111-8111-111111111111',receipt='22222222-2222-4222-8222-222222222222';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
-async function fixture(t,{changeEvidence=false,wrongResultReceipt=false,withhold=false}={}) {
+async function fixture(t,{changeEvidence=false,wrongResultReceipt=false,withhold=false,receiveOnly=false,outputAsInput=false}={}) {
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'collaboration-attachment-'));
   t.after(async()=>{const actual=await fs.realpath(root),parent=await fs.realpath(os.tmpdir());assert.equal(path.dirname(actual).toLowerCase(),parent.toLowerCase());assert.ok(path.basename(actual).startsWith('collaboration-attachment-'));await fs.rm(actual,{recursive:true});});
   const output=path.join(root,'out');await fs.mkdir(output);
   const bytes=Buffer.alloc(CHUNK_BYTES+17);for(let i=0;i<bytes.length;i++)bytes[i]=i%251;
   await fs.writeFile(path.join(root,'input.bin'),bytes);
   const profile={schemaVersion:1,targetThreadId:threadId,targetTitle:'Fixture',authorizedRoot:root,workspaceId:'test-root'};
-  const packet=prepareDelegation({taskId:'attachment-test',goal:'Return these original bytes',attachments:[{path:'input.bin',mimeType:'application/octet-stream'}]},profile,{attachmentMetadata:[{path:'input.bin',...await io.describe(root,'input.bin')}]});
+  const packet=prepareDelegation({taskId:'attachment-test',goal:'Return these original bytes',...(receiveOnly?{receiveAttachments:true}:{attachments:[{path:'input.bin',mimeType:'application/octet-stream'}]})},profile,{attachmentMetadata:[{path:'input.bin',...await io.describe(root,'input.bin')}]});
   const objects=new Map();let serial=0,time=Date.now(),result=null,sendCount=0,beginCount=0;
   const store={get:async k=>{const v=objects.get(k);return v?{bytes:v.bytes.slice(),etag:v.etag}:null;},put:async(k,b,c)=>{const v=objects.get(k);if(c?.absent&&v||c?.etag&&v?.etag!==c.etag)return false;objects.set(k,{bytes:b.slice(),etag:String(++serial)});return true;},remove:async ks=>ks.forEach(k=>objects.delete(k)),list:async prefix=>({keys:[...objects.keys()].filter(k=>k.startsWith(prefix))})};
   const service=createAttachmentService({store,now:()=>time,assignment:async()=>({receipt})});
   const methods={begin_attachment_upload:'begin',upload_attachment_chunk:'uploadChunk',finish_attachment_upload:'finish',get_attachment:'get',read_attachment_chunk:'readChunk',delete_attachment:'remove'};
   const host=Object.fromEntries(Object.entries(methods).map(([tool,method])=>[tool,async a=>{if(tool==='begin_attachment_upload')beginCount++;return service[method]('test-owner',a);} ]));
   const native={readThread:async()=>({thread:{id:threadId,kind:'chatgpt'}}),publishAssignment:async()=>({status:'stored',taskId:packet.assignment.taskId,materialMode:'external',assignmentReceipt:receipt}),
-    getTaskResult:async a=>result??{status:'not_found',...a},sendMessage:async a=>{sendCount++;assert.ok(a.prompt.includes('read_attachment_chunk'));if(!withhold)await finish();return {isError:false,content:[]};}};
+    getTaskResult:async a=>result??{status:'not_found',...a},sendMessage:async a=>{sendCount++;if(!receiveOnly)assert.ok(a.prompt.includes('read_attachment_chunk'));if(!withhold)await finish();return {isError:false,content:[]};}};
   async function finish() {
     const input=(await service.list('test-owner',{taskId:'attachment-test',revision:'r1'})).attachments.find(f=>f.purpose==='input');
-    const bound={taskId:'attachment-test',revision:'r1',attachmentId:input.attachmentId};
-    let offset=0,parts=[];while(offset<input.sizeBytes){const c=await host.read_attachment_chunk({...bound,offset,maxBytes:32768});parts.push(Buffer.from(c.dataBase64,'base64'));offset=c.nextOffset;}
-    assert.equal(digest(Buffer.concat(parts)),digest(bytes));
+    const bound={taskId:'attachment-test',revision:'r1'};
+    if(!receiveOnly){
+      let offset=0,parts=[];while(offset<input.sizeBytes){const c=await host.read_attachment_chunk({...bound,attachmentId:input.attachmentId,offset,maxBytes:32768});parts.push(Buffer.from(c.dataBase64,'base64'));offset=c.nextOffset;}
+      assert.equal(digest(Buffer.concat(parts)),digest(bytes));
+    }else assert.equal(input,undefined);
     const returned=await service.begin('test-owner',{taskId:'attachment-test',revision:'r1',assignmentReceipt:receipt,requestKey:'result-1',purpose:'result',fileName:'returned.bin',mimeType:'application/octet-stream',sizeBytes:bytes.length,sha256:digest(bytes)});
     const rb={...bound,attachmentId:returned.attachmentId};
     for(let offset=0;offset<bytes.length;offset+=CHUNK_BYTES){const c=bytes.subarray(offset,offset+CHUNK_BYTES);await host.upload_attachment_chunk({...rb,offset,dataBase64:c.toString('base64'),sha256:digest(c)});}
     await host.finish_attachment_upload(rb);
-    result={status:'found',taskId:'attachment-test',revision:'r1',receipt:'33333333-3333-4333-8333-333333333333',result:{taskId:'attachment-test',revision:'r1',assignmentReceipt:wrongResultReceipt?threadId:receipt,status:'completed',summary:'Original bytes checked',materialsRead:[{path:'input.bin',sha256:digest(bytes),source:'attachment',attachmentId:changeEvidence?'att_'+'a'.repeat(48):input.attachmentId}],attachmentIds:[returned.attachmentId],findings:[],limitations:['Local fixture only'],requests:[]}};
+    const materialsRead=receiveOnly?(outputAsInput?[{path:'returned.bin',sha256:digest(bytes),source:'attachment',attachmentId:returned.attachmentId}]:[]):[{path:'input.bin',sha256:digest(bytes),source:'attachment',attachmentId:changeEvidence?'att_'+'a'.repeat(48):input.attachmentId}];
+    result={status:'found',taskId:'attachment-test',revision:'r1',receipt:'33333333-3333-4333-8333-333333333333',result:{taskId:'attachment-test',revision:'r1',assignmentReceipt:wrongResultReceipt?threadId:receipt,status:'completed',summary:'Original bytes checked',materialsRead,attachmentIds:[returned.attachmentId],findings:[{severity:'info',message:'returned.bin: '+returned.attachmentId}],limitations:['Local fixture only'],requests:[]}};
   }
   const states=[],options={deliveryAuthorized:true,now:()=>time,sleep:async ms=>{time+=ms;},checkpoint:async state=>states.push(structuredClone(state)),attachments:{api,host,io,outputRoot:output}};
   return {root,output,packet,native,host,options,states,objects,finish,counts:()=>({sendCount,beginCount})};
@@ -53,6 +56,19 @@ test('one entry sends actual bytes, receives original bytes, independently hashe
 });
 test('authorization is checked before publication, upload or sending',async t=>{
   const f=await fixture(t);await assert.rejects(core.delegateAndWait(f.packet,f.native,{...f.options,deliveryAuthorized:false}),/MESSAGE_AUTHORIZATION_REQUIRED/);assert.deepEqual(f.counts(),{sendCount:0,beginCount:0});
+});
+test('receive-only output with empty input evidence downloads, verifies, cleans and resumes without another message',async t=>{
+  const f=await fixture(t,{receiveOnly:true}),out=await core.delegateAndWait(f.packet,f.native,f.options);
+  assert.equal(out.status,'completed');assert.equal(f.packet.assignment.files.length,0);assert.equal(out.result.materialsRead.length,0);
+  assert.equal(out.downloads.length,1);assert.equal(digest(await fs.readFile(out.downloads[0].path)),out.downloads[0].sha256);
+  assert.equal(out.cleanup.deleted.length,1);assert.equal(out.cleanup.pending.length,0);assert.deepEqual(f.counts(),{sendCount:1,beginCount:0});
+  const resumed=await core.delegateAndWait(f.packet,f.native,{...f.options,resume:out.state});
+  assert.equal(resumed.status,'completed');assert.equal(f.counts().sendCount,1);
+});
+test('receive-only output falsely listed as an input still fails before download or success cleanup',async t=>{
+  const f=await fixture(t,{receiveOnly:true,outputAsInput:true}),out=await core.delegateAndWait(f.packet,f.native,f.options);
+  assert.equal(out.status,'blocked');assert.equal(out.errorCode,'RESULT_MATERIAL_MISMATCH');
+  assert.equal(out.state.downloads.length,0);assert.equal(out.state.deletedAttachmentIds.length,0);
 });
 test('file version changed after preparation fails before any attachment upload or Chat message',async t=>{
   const f=await fixture(t);await fs.writeFile(path.join(f.root,'input.bin'),'changed');const out=await core.delegateAndWait(f.packet,f.native,f.options);assert.equal(out.errorCode,'FILE_CHANGED');assert.deepEqual(f.counts(),{sendCount:0,beginCount:0});

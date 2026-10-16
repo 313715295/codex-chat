@@ -12,7 +12,7 @@
 
 ## 统一入口
 
-由 Codex 生成请求文件，不让用户编辑 JSON。正文 wholeFile=true 时测量完整版本；片段提供整文件 sha256 与准确行范围。附件 path 是授权目录内的相对路径。只收生成文件设 receiveAttachments=true。用户选择生图时设 kind=design、imageGeneration=true，用 imagePrompt 提供单条画面要求，或 imagePrompts 提供 1–16 条；不同时使用两者，不设 receiveAttachments。只写画面要求，不加任务编号、MCP 或回传指令。需要的参考材料先另行提供，不混入此纯指令包。
+按 [请求写法](requests.md) 由 Codex 生成请求文件。业务目标与传输协议分开：程序自动附上本轮需要的提交/附件说明，不重复手写工具调用流程。用户另行要求取回已有图或文件时使用普通 receiveAttachments 请求，明确不重新生成；默认生图队列仍只发送指令。
 
 一次 functions.exec 中加载并运行 scripts/job-entry.js，不把完整源码打印进模型上下文。普通任务自动 prepare/load、核对账号与目标、获取执行锁、传材料、发消息、等待、下载校验和清理。生图入口不加载附件 IO，不登记远程任务或查询正式结果；沿用当前账号绑定，通过平台所有者核验、原生 read_thread 和执行锁检查后发送。用户许可已经覆盖本次协作时，deliveryAuthorized=true；不会改变审批设置或读取登录凭据。
 

@@ -17,6 +17,7 @@ export async function installEntry({destination=join(process.env.CODEX_HOME??joi
     'SKILL.md':'skill/codex-chat-delegate/SKILL.md',
     'agents/openai.yaml':'skill/codex-chat-delegate/agents/openai.yaml',
     'references/host-entry.md':'skill/codex-chat-delegate/references/host-entry.md',
+    'references/requests.md':'skill/codex-chat-delegate/references/requests.md',
     'scripts/host-runtime.js':'source/collaboration/host-runtime.js',
     'scripts/job-entry.js':'source/collaboration/job-entry.js',
     'scripts/prepare.mjs':'source/collaboration/prepare.mjs',
@@ -31,7 +32,7 @@ export async function installEntry({destination=join(process.env.CODEX_HOME??joi
     'references/own-results-setup.md':'skill/codex-chat-delegate/references/own-results-setup.md'
   };
   for(const [out,input]of Object.entries(sources)){const target=join(destination,out);await mkdir(dirname(target),{recursive:true});await copyFile(join(packageRoot,input),target);}
-  await writeFile(marker,JSON.stringify({managedBy:'codex-chat-business-loop',packageRoot,version:'0.3.9',implicitInvocation:true},null,2)+'\n');
+  await writeFile(marker,JSON.stringify({managedBy:'codex-chat-business-loop',packageRoot,version:'0.3.10',implicitInvocation:true},null,2)+'\n');
   return {status:'installed',destination,serviceStarted:false,messageSent:false,permissionsChanged:false,discoveryRequiresHostRefresh:true};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)
