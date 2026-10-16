@@ -20,7 +20,7 @@ function validate(store){
     store={...store,schemaVersion:2,accounts:{},savedBindings:{}};
   }
   insist(store?.schemaVersion===2&&store.bindings&&store.activeTasks&&store.accounts&&store.savedBindings&&
-    Object.keys(store).length===5&&typeof store.bindings==='object'&&typeof store.activeTasks==='object'&&
+    Object.keys(store).length===(Object.hasOwn(store,'pausedTasks')?6:5)&&typeof store.bindings==='object'&&typeof store.activeTasks==='object'&&
     !Array.isArray(store.bindings)&&!Array.isArray(store.activeTasks),'INVALID_BINDING_STORE');
   insist(Object.keys(store.bindings).length<=1000,'BINDING_STORE_LIMIT');
   insist(!Array.isArray(store.accounts)&&!Array.isArray(store.savedBindings)&&Object.keys(store.accounts).length<=100,'INVALID_ACCOUNT_STORE');
@@ -43,6 +43,22 @@ function validate(store){
   for(const [id,task]of Object.entries(store.activeTasks)){
     insist(store.bindings[id]&&hash.test(task?.packetId)&&Object.keys(task).length===4&&key.test(task.taskId)&&key.test(task.revision)&&
       (task.waiterId===null||uuid.test(task.waiterId)),'INVALID_ACTIVE_TASK');
+  }
+  if(Object.hasOwn(store,'pausedTasks')){
+    insist(store.pausedTasks&&typeof store.pausedTasks==='object'&&!Array.isArray(store.pausedTasks),'INVALID_PAUSED_TASK_STORE');
+    let count=0;
+    for(const [id,tasks]of Object.entries(store.pausedTasks)){
+      insist(uuid.test(id)&&tasks&&typeof tasks==='object'&&!Array.isArray(tasks),'INVALID_PAUSED_TASK_STORE');
+      for(const [packetId,p]of Object.entries(tasks)){
+        const task=p?.task;
+        insist(hash.test(packetId)&&Object.keys(p??{}).length===4&&task?.packetId===packetId&&Object.keys(task).length===4&&
+          key.test(task.taskId)&&key.test(task.revision)&&task.waiterId===null&&typeof p.pausedAt==='string'&&
+          Number.isFinite(Date.parse(p.pausedAt))&&store.activeTasks[id]?.packetId!==packetId,'INVALID_PAUSED_TASK');
+        check(id,p.profile);
+        insist(JSON.stringify(p.connection)===JSON.stringify(p.profile.accountId?store.accounts[p.profile.accountId].connection:null),'PAUSED_CONNECTION_CHANGED');
+        insist(++count<=1000,'PAUSED_TASK_STORE_LIMIT');
+      }
+    }
   }
   return store;
 }
@@ -98,7 +114,47 @@ export async function registerAccount(base,connection,{alias=''}={}){
 }
 export async function listAccounts(base,id=sourceThreadId()){
   id=sourceThreadId(id);const store=await readStore(base);
-  return {activeAccountId:store.bindings[id]?.accountId??null,accounts:Object.values(store.accounts).map(a=>({...a,binding:store.savedBindings[id]?.[a.connection.accountId]??null}))};
+  return {activeAccountId:store.bindings[id]?.accountId??null,accounts:Object.values(store.accounts).map(a=>({...a,binding:store.savedBindings[id]?.[a.connection.accountId]??null})),
+    pausedTasks:Object.values(store.pausedTasks?.[id]??{}).map(p=>({packetId:p.task.packetId,taskId:p.task.taskId,revision:p.task.revision,accountId:p.profile.accountId??null,targetThreadId:p.profile.targetThreadId,pausedAt:p.pausedAt}))};
+}
+function packetMatches(packet,profile,connection){
+  return packet.target?.threadId===profile.targetThreadId&&packet.assignment?.workspaceId===profile.workspaceId&&
+    (!packet.source||(packet.source.codexThreadId===profile.sourceThreadId&&packet.source.authorizedRoot===profile.authorizedRoot))&&
+    (profile.accountId?JSON.stringify(packet.connection)===JSON.stringify(connection):!packet.connection)&&
+    (!packet.attachments||packet.attachments.root===profile.authorizedRoot);
+}
+// Explicit local pause only; a running waiter must first stop through its host.
+// Keep the exact account, Chat, task and connection so pause never means success.
+export async function pauseExecution(base,id,packet){
+  id=sourceThreadId(id);
+  return mutate(base,store=>{
+    const active=store.activeTasks[id],profile=store.bindings[id];
+    insist(active&&active.packetId===packet.packetId&&active.taskId===packet.assignment?.taskId&&active.revision===packet.assignment?.revision,'EXECUTION_PACKET_MISMATCH');
+    insist(active.waiterId===null,'TASK_ALREADY_RUNNING');
+    const connection=profile.accountId?store.accounts[profile.accountId].connection:null;
+    insist(packetMatches(packet,profile,connection),'EXECUTION_BINDING_MISMATCH');
+    store.pausedTasks??={};store.pausedTasks[id]??={};
+    insist(!store.pausedTasks[id][packet.packetId],'TASK_ALREADY_PAUSED');
+    store.pausedTasks[id][packet.packetId]={task:{...active},profile:{...profile},connection,pausedAt:new Date().toISOString()};
+    delete store.activeTasks[id];
+    return {status:'paused',sourceThreadId:id,packetId:packet.packetId,taskId:active.taskId,messageSent:false};
+  });
+}
+export async function resumeExecution(base,id,packet){
+  id=sourceThreadId(id);
+  return mutate(base,store=>{
+    insist(!store.activeTasks[id],'BINDING_HAS_PENDING_TASK');
+    const paused=store.pausedTasks?.[id]?.[packet.packetId];
+    insist(paused&&paused.task.taskId===packet.assignment?.taskId&&paused.task.revision===packet.assignment?.revision,'PAUSED_TASK_NOT_FOUND');
+    insist(packetMatches(packet,paused.profile,paused.connection),'EXECUTION_BINDING_MISMATCH');
+    store.bindings[id]={...paused.profile};
+    if(paused.profile.accountId){store.savedBindings[id]??={};store.savedBindings[id][paused.profile.accountId]={...paused.profile};}
+    store.activeTasks[id]={...paused.task};
+    delete store.pausedTasks[id][packet.packetId];
+    if(!Object.keys(store.pausedTasks[id]).length)delete store.pausedTasks[id];
+    if(!Object.keys(store.pausedTasks).length)delete store.pausedTasks;
+    return {status:'pending',sourceThreadId:id,packetId:packet.packetId,taskId:paused.task.taskId,messageSent:false};
+  });
 }
 export async function switchAccount(base,accountId,id=sourceThreadId()){
   id=sourceThreadId(id);
@@ -127,6 +183,11 @@ export async function acquireExecution(base,id,packet){
     const prior=store.activeTasks[id];
     insist(!prior||prior.packetId===packet.packetId,'THREAD_HAS_PENDING_TASK');
     insist(!prior?.waiterId,'TASK_ALREADY_RUNNING');
+    for(const tasks of Object.values(store.pausedTasks??{}))for(const paused of Object.values(tasks)){
+      insist(paused.task.packetId!==packet.packetId,'TASK_IS_PAUSED');
+      insist(paused.profile.targetThreadId!==packet.target.threadId,'CHAT_HAS_PAUSED_TASK');
+      insist(paused.task.taskId!==packet.assignment.taskId||paused.task.revision!==packet.assignment.revision,'TASK_ID_IN_USE');
+    }
     for(const [other,t]of Object.entries(store.activeTasks))insist(other===id||t.taskId!==packet.assignment.taskId||t.revision!==packet.assignment.revision,'TASK_ID_IN_USE');
     const waiterId=randomUUID();store.activeTasks[id]={packetId:packet.packetId,taskId:packet.assignment.taskId,revision:packet.assignment.revision,waiterId};
     return {sourceThreadId:id,packetId:packet.packetId,waiterId};

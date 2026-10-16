@@ -8,6 +8,8 @@
 
 旧 schema 1 自动迁移到 schema 2，但不猜账号归属，不改旧目标。核实原账号后用 account-register/account-bind 补上身份。新的 CLI prepare 必须已有账号连接；旧的已发送任务保留原包续等，不强行换账号。每个 Codex 在不同账号保存一份 Chat/目录，切换不覆盖原配置；任一待完成任务阻止切换或更改通道。结果包固定账号、服务和 Chat，旧账号的包不能在新账号下加载或取结果。unbind 只移除当前账号绑定，其他账号保留。
 
+用户要求暂停旧协作并更换 Chat 或账号时，先停止正在运行的工具等待，再用 prepare.mjs pause <原 packet.json>。只有 waiter 已退出的待办可暂停；程序原子保存其账号、通道、目标和执行占用，原任务包、状态及回执不变，不标为完成，不发送远端消息。随后仍须核实当前账号；同账号更换 Chat 用 bind，账号切换用 account-switch/account-bind。未指定新材料目录时沿用当前授权范围。accounts 会列出本 Codex 的暂停任务。暂停的 Chat 和任务编号继续保留，不能插入新任务。用户要求恢复时，用 prepare.mjs resume <原 packet.json> 恢复原绑定和待办，再核对当前账号并按原 packetPath 续等；不会重发委托。超时或 systemError 本身不自动暂停或释放占用。
+
 ## 统一入口
 
 由 Codex 生成请求文件，不让用户编辑 JSON。正文 wholeFile=true 时测量完整版本；片段提供整文件 sha256 与准确行范围。附件 path 是授权目录内的相对路径。只收生成文件设 receiveAttachments=true。用户选择生图时设 kind=design、imageGeneration=true，用 imagePrompt 提供单条画面要求，或 imagePrompts 提供 1–16 条；不同时使用两者，不设 receiveAttachments。只写画面要求，不加任务编号、MCP 或回传指令。需要的参考材料先另行提供，不混入此纯指令包。

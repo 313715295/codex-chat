@@ -72,11 +72,13 @@ test('current share package is complete, excludes retired local service entries 
  const base=await mkdtemp(join(tmpdir(),'friend-files-package-'));
  try {
   const output=join(base,'package');const built=await buildFriendPackage(output);
-  assert.equal(built.version,'0.3.7');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
+  assert.equal(built.version,'0.3.8');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
   const manifest=JSON.parse(await readFile(join(output,'PACKAGE-MANIFEST.json'),'utf8'));
   assert.equal(manifest.friendEndToEndAcceptancePassed,false);
   assert.equal(manifest.acceptance.multiAccountReal,'deferred_by_user');
   assert.equal(manifest.acceptance.newAccountFirstSetup,'partial_chat_system_error_blocked');
+  assert.equal(manifest.acceptance.accountReturnNewChat,'synthetic_text_roundtrip_passed_current_machine_2026-10-16');
+  assert.equal(manifest.acceptance.pauseResumeAndChatSwitchLocal,'passed');
   assert.ok(manifest.files['source/collaboration/pack-own-results.mjs']);
   assert.ok(manifest.files['source/results-attachments-template/build/sites-vite-plugin.ts']);
   assert.ok(manifest.files['source/results-attachments-template/build/connector-preview-plugin.mjs']);
@@ -88,7 +90,23 @@ test('current share package is complete, excludes retired local service entries 
   const installed=await installer.installEntry({destination});
   assert.equal(installed.serviceStarted,false);assert.equal(installed.messageSent,false);assert.equal(installed.permissionsChanged,false);
   assert.equal(await readFile(join(destination,'scripts/pack-own-results.mjs'),'utf8'),await readFile(join(output,'source/collaboration/pack-own-results.mjs'),'utf8'));
-  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.7');
+  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.8');
+  // Exercise the actually installed helpers; exporting a function alone is not acceptance.
+  const installedBindings=await import(pathToFileURL(join(destination,'scripts/bindings.mjs')).href);
+  const installedPrepare=await import(pathToFileURL(join(destination,'scripts/prepare.mjs')).href);
+  const account={schemaVersion:2,source:'openai-sites:get_site',projectId:'package-fixture',siteRole:'owner',registeredMcpId:'plugin_asdk_app_fixture',mcpUrl:'https://fixture.example/mcp',oauthResource:'https://fixture.example/mcp',accountId:'package-account',principalId:'package-principal',toolPrefix:'mcp__fixture_'};
+  const source='00000000-0000-4000-8000-000000000001',oldChat='00000000-0000-4000-8000-000000000101',newChat='00000000-0000-4000-8000-000000000102';
+  const state=join(base,'isolated-state'),materials=join(base,'materials');await mkdir(materials);
+  await installedBindings.registerAccount(state,account);
+  const profile=await installedPrepare.bindConversation('https://chatgpt.com/c/'+oldChat,materials,{base:state,codexThreadId:source,accountId:account.accountId});
+  const packet=installedPrepare.prepareDelegation({goal:'Packaged pause and Chat switch'},profile);
+  const lease=await installedBindings.acquireExecution(state,source,packet);
+  await installedBindings.finishExecution(state,lease,{terminal:false});await installedBindings.pauseExecution(state,source,packet);
+  await installedPrepare.bindConversation('https://chatgpt.com/c/'+newChat,materials,{base:state,codexThreadId:source,accountId:account.accountId});
+  assert.equal((await installedBindings.readBinding(state,source)).targetThreadId,newChat);
+  await installedBindings.resumeExecution(state,source,packet);
+  assert.equal((await installedBindings.readBinding(state,source)).targetThreadId,oldChat);
+  const resumed=await installedBindings.acquireExecution(state,source,packet);await installedBindings.finishExecution(state,resumed,{terminal:true});
   await writeFile(join(output,'source/collaboration/prepare.mjs'),'tampered');
   await assert.rejects(checkPackage(output),/PACKAGE_FILE_HASH_MISMATCH/);
   await assert.rejects(buildFriendPackage(output),/NEW_PACKAGE_DIRECTORY_REQUIRED/);

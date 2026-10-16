@@ -19,7 +19,7 @@ Chat 返回 needs_materials 时，Codex 在授权目录内补充必要正文或�
 
 ## 执行
 
-1. 用 prepare.mjs show 读取本 Codex 会话的账号、私人通道、Chat 和材料目录，原生 read_thread 核对目标。新账号按 [通道初始化](references/own-results-setup.md) 核实并保存；已配置账号用 account-switch 切换，保留各账号的绑定。每个 Codex 同时绑定一个 Chat，不同绑定可共用材料目录；待完成任务阻止切换。详见 [宿主入口](references/host-entry.md)。
+1. 用 prepare.mjs show 读取本 Codex 会话的账号、私人通道、Chat 和材料目录，原生 read_thread 核对目标。以 Codex 会话为主，同一时刻合作一个 Chat，可按安排更换目标；不同绑定可共用材料目录。未完成任务默认阻止切换；用户要求保留暂停后更换时，按 [宿主入口](references/host-entry.md) 保存并暂停原任务，再绑定新目标。新账号按 [通道初始化](references/own-results-setup.md) 核实并保存；已配置账号用 account-switch 恢复绑定，切换后仍核验真实账号。
 2. 按宿主入口调用 job-entry.js。普通审核、规划、文字设计优先由程序查询 get_task_result，每五分钟仍无结果时才用 read_thread 核对漏交；不以 Chat 停止工作代替正式结果。生图只走原生消息，保留账号、目标和执行锁检查，不登记远程结果任务、不调用附件通道。
 3. 核对任务、版本和回执；回传文件下载后校验完整字节与哈希，清理短期附件，再继续当前任务。completed 只覆盖实际完成范围；cleanup.pending 或 executionCleanup.pending 如实报告。
 4. 超时加载原包和状态续等；sending/uncertain 不盲目重发，待完成任务不插入新任务或盲目解除锁。图片队列报告已发送/总条数，保留未发送项；旧自动取回图片包不续跑。

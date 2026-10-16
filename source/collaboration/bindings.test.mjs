@@ -84,6 +84,13 @@ test('the real CLI uses caller context for binding, preparation, cross-thread de
   await assert.rejects(cli(sourceB,'load',prepared.packetPath),e=>e.stderr.includes('PACKET_THREAD_BINDING_MISMATCH'));
   const first=await cli(sourceA,'claim',prepared.packetPath);await assert.rejects(cli(sourceA,'claim',prepared.packetPath),e=>e.stderr.includes('TASK_ALREADY_RUNNING'));
   assert.equal((await cli(sourceA,'finish',prepared.packetPath,first.waiterId,'pending')).status,'pending');
+  const packetBytes=await readFile(prepared.packetPath);const statePath=prepared.packetPath+'.state.json';await writeFile(statePath,JSON.stringify({delivery:'sent',assignmentReceipt:'preserve-this-receipt'}));
+  const stateBytes=await readFile(statePath);
+  assert.equal((await cli(sourceA,'pause',prepared.packetPath)).status,'paused');
+  assert.equal((await cli(sourceA,'accounts')).pausedTasks.length,1);
+  await assert.rejects(cli(sourceB,'resume',prepared.packetPath),e=>e.stderr.includes('PAUSED_TASK_NOT_FOUND'));
+  assert.equal((await cli(sourceA,'resume',prepared.packetPath)).status,'pending');
+  assert.deepEqual(await readFile(prepared.packetPath),packetBytes);assert.deepEqual(await readFile(statePath),stateBytes);
   const resumed=await cli(sourceA,'claim',prepared.packetPath);assert.equal((await cli(sourceA,'finish',prepared.packetPath,resumed.waiterId,'terminal')).status,'finished');
 }));
 test('the host requires a guard, keeps timed-out Chat work pending, and resumes without a second message',()=>fixture(async({root,state})=>{

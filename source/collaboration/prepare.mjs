@@ -6,7 +6,7 @@ import {homedir} from 'node:os';
 import {join,resolve,relative,isAbsolute,dirname} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {describe} from './attachment-local.mjs';
-import {sourceThreadId,bindingPath,readBinding,saveBinding,unbind,acquireExecution,finishExecution,registerAccount,listAccounts,switchAccount} from './bindings.mjs';
+import {sourceThreadId,bindingPath,readBinding,saveBinding,unbind,acquireExecution,finishExecution,pauseExecution,resumeExecution,registerAccount,listAccounts,switchAccount} from './bindings.mjs';
 import {validateResultConnection} from './result-connection.mjs';
 
 export const stateRoot=join(process.env.LOCALAPPDATA??homedir(),'CodexChatReader');
@@ -169,11 +169,16 @@ async function main(args){
     console.log(JSON.stringify({packet,resume,packetPath:resolve(args[1]),statePath:resolve(args[1])+'.state.json'}));return;
   }
   if(args[0]==='claim'&&args.length===2){const job=await loadForThread(args[1]);console.log(JSON.stringify(await acquireExecution(stateRoot,job.sourceThreadId,job.packet)));return;}
+  if(args[0]==='pause'&&args.length===2){const job=await loadForThread(args[1]);console.log(JSON.stringify(await pauseExecution(stateRoot,job.sourceThreadId,job.packet)));return;}
+  if(args[0]==='resume'&&args.length===2){
+    const packet=await readJson(args[1]);insist(packet.packetId===packetDigest(packet),'PACKET_CHANGED');
+    console.log(JSON.stringify(await resumeExecution(stateRoot,sourceThreadId(),packet)));return;
+  }
   if(args[0]==='finish'&&args.length===4){
     insist(['terminal','pending'].includes(args[3]),'INVALID_EXECUTION_FINISH');const job=await loadForThread(args[1]);
     console.log(JSON.stringify(await finishExecution(stateRoot,{sourceThreadId:job.sourceThreadId,packetId:job.packet.packetId,waiterId:args[2]},{terminal:args[3]==='terminal'})));return;
   }
-  throw new Error('Usage: prepare.mjs bind <exact Chat URL> [authorized directory] | show | unbind | prepare <request.json> | load <packet.json> | claim <packet.json> | finish <packet.json> <waiterId> <terminal|pending>');
+  throw new Error('Usage: prepare.mjs bind <exact Chat URL> [authorized directory] | show | unbind | prepare <request.json> | load <packet.json> | claim <packet.json> | pause <packet.json> | resume <packet.json> | finish <packet.json> <waiterId> <terminal|pending>');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)
   main(process.argv.slice(2)).catch(e=>{console.error(e.message);process.exitCode=1;});
