@@ -6,7 +6,7 @@ import {homedir} from 'node:os';
 import {join,resolve,relative,isAbsolute,dirname} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {describe} from './attachment-local.mjs';
-import {sourceThreadId,bindingPath,readBinding,saveBinding,unbind,acquireExecution,finishExecution,pauseExecution,resumeExecution,registerAccount,listAccounts,switchAccount} from './bindings.mjs';
+import {sourceThreadId,bindingPath,readBinding,saveBinding,readTarget,saveTarget,listTargets,removeTarget,unbind,acquireExecution,finishExecution,pauseExecution,resumeExecution,registerAccount,listAccounts,switchAccount} from './bindings.mjs';
 import {validateResultConnection} from './result-connection.mjs';
 
 export const stateRoot=join(process.env.LOCALAPPDATA??homedir(),'CodexChatReader');
@@ -34,6 +34,7 @@ export function prepareDelegation(input,profile,{attachmentMetadata=[]}={}){
   insist(!Object.hasOwn(input,'materialRequests')&&!Object.hasOwn(input,'localReader'),'RETIRED_LOCAL_ACCESS_CONFIGURATION');
   insist(profile?.schemaVersion===1&&typeof profile.workspaceId==='string'&&profile.workspaceId&&
     typeof profile.authorizedRoot==='string'&&typeof profile.targetThreadId==='string','COLLABORATION_NOT_BOUND');
+  if(input.targetThreadId!==undefined)insist(profile.routeTarget===true&&input.targetThreadId===profile.targetThreadId,'REQUEST_TARGET_MISMATCH');
   const files=new Map();
   for(const f of input.files??[]){
     insist(validPath(f.path)&&validHash(f.sha256)&&!Object.hasOwn(f,'content')&&!files.has(f.path),'METADATA_ONLY_REQUIRED');
@@ -73,7 +74,7 @@ export function prepareDelegation(input,profile,{attachmentMetadata=[]}={}){
     attachmentRequests.push({path:selected.path,mimeType:selected.mimeType,sha256:measured.sha256,sizeBytes:measured.sizeBytes});
   }
   const proposedId=input.taskId??'C2C-'+randomUUID(),revision=input.revision??'r1';
-  const prefix=profile.sourceThreadId?'C'+sha(sourceThreadId(profile.sourceThreadId)+(profile.accountId?'|'+profile.accountId:'')).slice(0,12)+'-':'';
+  const prefix=profile.sourceThreadId?'C'+sha(sourceThreadId(profile.sourceThreadId)+(profile.accountId?'|'+profile.accountId:'')+(profile.routeTarget?'|'+profile.targetThreadId:'')).slice(0,12)+'-':'';
   const taskId=prefix&&typeof proposedId==='string'&&!proposedId.startsWith(prefix)?prefix+proposedId:proposedId;
   insist([taskId,revision].every(v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(v)),'INVALID_TASK_ID');
   const kind=input.kind??'review';insist(['review','design','planning'].includes(kind),'INVALID_TASK_KIND');
@@ -87,7 +88,7 @@ export function prepareDelegation(input,profile,{attachmentMetadata=[]}={}){
     materialMode:'external',workspaceId:profile.workspaceId,files:[...files.values()]};
   insist(assignment.files.length<=256&&Buffer.byteLength(stable(assignment))<=1048576,'ASSIGNMENT_BUDGET_EXCEEDED');
   const packet={schemaVersion:1,target:{threadId:profile.targetThreadId,title:profile.targetTitle??''},assignment,directMaterials};
-  if(profile.sourceThreadId)packet.source={codexThreadId:sourceThreadId(profile.sourceThreadId),authorizedRoot:profile.authorizedRoot};
+  if(profile.sourceThreadId)packet.source={codexThreadId:sourceThreadId(profile.sourceThreadId),authorizedRoot:profile.authorizedRoot,...(profile.routeTarget?{routeTarget:true}:{})};
   if(profile.accountId){insist(profile.connection?.accountId===profile.accountId,'ACCOUNT_CONNECTION_REQUIRED');packet.connection=validateResultConnection(profile.connection);}
   if(attachmentRequests.length||input.receiveAttachments===true){packet.attachments={root:profile.authorizedRoot,requests:attachmentRequests};}
   if(input.imageGeneration!==undefined){
@@ -114,17 +115,18 @@ export async function readJson(path,maxBytes=1048576){
   const f=await stat(path);insist(f.isFile()&&f.size<=maxBytes,'CONFIG_TOO_LARGE');
   return JSON.parse(await readFile(path,'utf8'));
 }
-export async function bindConversation(url,authorizedRoot,{base=stateRoot,title='',codexThreadId=sourceThreadId(),accountId}={}){
+export async function bindConversation(url,authorizedRoot,{base=stateRoot,title='',codexThreadId=sourceThreadId(),accountId,asTarget=false}={}){
   const root=await realpath(resolve(authorizedRoot));insist((await stat(root)).isDirectory(),'AUTHORIZED_DIRECTORY_REQUIRED');
   const profile={schemaVersion:1,sourceThreadId:sourceThreadId(codexThreadId),targetThreadId:chatId(url).toLowerCase(),targetTitle:title,authorizedRoot:root,workspaceId:'local-'+sha(root).slice(0,16)};
   if(accountId)profile.accountId=accountId;
-  return saveBinding(base,profile);
+  return asTarget?saveTarget(base,profile):saveBinding(base,profile);
 }
 export async function loadForThread(packetPath,{base=stateRoot,codexThreadId=sourceThreadId()}={}){
   const packet=await readJson(packetPath);insist(packet.packetId===packetDigest(packet),'PACKET_CHANGED');
   insist((packet.materialRequests===undefined||Array.isArray(packet.materialRequests)&&packet.materialRequests.length===0)&&
     (packet.localReader===undefined||packet.localReader===null),'RETIRED_LOCAL_ACCESS_CONFIGURATION');
-  const id=sourceThreadId(codexThreadId),profile=await readBinding(base,id);
+  insist(packet.source?.routeTarget===undefined||packet.source.routeTarget===true,'INVALID_ROUTE_TARGET');
+  const id=sourceThreadId(codexThreadId),profile=packet.source?.routeTarget?await readTarget(base,packet.target.threadId,id):await readBinding(base,id);
   insist(packet.target.threadId===profile.targetThreadId&&packet.assignment.workspaceId===profile.workspaceId&&
     (!packet.source||(packet.source.codexThreadId===id&&packet.source.authorizedRoot===profile.authorizedRoot))&&
     (profile.accountId?JSON.stringify(packet.connection)===JSON.stringify(profile.connection):!packet.connection)&&
@@ -132,6 +134,12 @@ export async function loadForThread(packetPath,{base=stateRoot,codexThreadId=sou
   return {packet,sourceThreadId:id};
 }
 async function main(args){
+  if(args[0]==='targets'&&args.length===1){console.log(JSON.stringify(await listTargets(stateRoot)));return;}
+  if(args[0]==='target-remove'&&args.length===2){console.log(JSON.stringify(await removeTarget(stateRoot,args[1])));return;}
+  if(args[0]==='target-bind'&&args.length>=2&&args.length<=4){
+    const current=await readBinding(stateRoot);insist(current.accountId,'ACCOUNT_CONNECTION_REQUIRED');
+    console.log(JSON.stringify({status:'target_saved',profile:await bindConversation(args[1],args[2]??current.authorizedRoot,{accountId:current.accountId,asTarget:true,title:args[3]??''}),messageSent:false}));return;
+  }
   if(args[0]==='accounts'&&args.length===1){console.log(JSON.stringify(await listAccounts(stateRoot)));return;}
   if(args[0]==='account-register'&&(args.length===2||args.length===3)){console.log(JSON.stringify(await registerAccount(stateRoot,await readJson(args[1],16384),{alias:args[2]??''})));return;}
   if(args[0]==='account-switch'&&args.length===2){console.log(JSON.stringify({status:'switched',profile:await switchAccount(stateRoot,args[1]),messageSent:false}));return;}
@@ -150,9 +158,9 @@ async function main(args){
     const profile=await bindConversation(args[1],root,{accountId});console.log(JSON.stringify({status:'bound',profilePath:bindingPath(stateRoot),profile,messageSent:false}));return;
   }
   if(args[0]==='prepare'&&args.length===2){
-    const profile=await readBinding(stateRoot);
-    insist(profile.accountId&&profile.connection,'ACCOUNT_CONNECTION_REQUIRED');
     const input=await readJson(args[1]);
+    const profile=input.targetThreadId!==undefined?await readTarget(stateRoot,input.targetThreadId):await readBinding(stateRoot);
+    insist(profile.accountId&&profile.connection,'ACCOUNT_CONNECTION_REQUIRED');
     const attachmentMetadata=[];
     for(const selection of input.attachments??[])attachmentMetadata.push({path:selection.path,...await describe(profile.authorizedRoot,selection.path)});
     const packet=prepareDelegation(input,profile,{attachmentMetadata});

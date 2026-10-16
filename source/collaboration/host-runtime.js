@@ -157,7 +157,8 @@
     if ((packet.materialRequests!==undefined&&(!Array.isArray(packet.materialRequests)||packet.materialRequests.length)) ||
       (packet.localReader!==undefined&&packet.localReader!==null)) fail('RETIRED_LOCAL_ACCESS_CONFIGURATION');
     if(packet.source&&(!record(packet.source)||!uuid.test(packet.source.codexThreadId)||
-      typeof packet.source.authorizedRoot!=='string'||!packet.source.authorizedRoot))fail('INVALID_SOURCE_BINDING');
+      typeof packet.source.authorizedRoot!=='string'||!packet.source.authorizedRoot||
+      (packet.source.routeTarget!==undefined&&packet.source.routeTarget!==true)))fail('INVALID_SOURCE_BINDING');
     if(packet.connection&&(!packet.source||packet.connection.schemaVersion!==2||
       packet.connection.source!=='openai-sites:get_site'||packet.connection.siteRole!=='owner'||
       typeof packet.connection.accountId!=='string'||typeof packet.connection.principalId!=='string'||
@@ -446,6 +447,9 @@
       const activity=Number(thread.updatedAt),finished=Number(turn.completedAt);
       if(thread.status?.type!=='idle'||turn.status!=='completed'||!Number.isFinite(activity)||activity<=start+1||
         (turn.completedAt!==undefined&&turn.completedAt!==null&&(!Number.isFinite(finished)||finished<start)))return null;
+      // The desktop may reflect a completed user-message placeholder before any
+      // assistant response. It is not evidence of an already processed task.
+      if(!packet.imageGeneration&&!turn.items?.some(item=>item.type==='agentMessage'))return null;
       if(m.lastResultTurnId!==turn.id){m.lastResultTurnId=turn.id;const ready=await readResult();if(ready)return ready;}
       if(packet.imageGeneration&&m.phase==='task')return await maybeExport(true);
       if(state.resultSubmission.delivery!=='not_sent'||cancelled())return null;

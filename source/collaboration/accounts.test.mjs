@@ -110,7 +110,7 @@ test('old schema is migrated without changing its target; it needs explicit veri
  await mkdir(state);const old={schemaVersion:1,bindings:{[source]:{schemaVersion:1,sourceThreadId:source,targetThreadId:chatA,targetTitle:'',authorizedRoot:root,workspaceId:'old'}},activeTasks:{}};
  await writeFile(join(state,'bindings.json'),JSON.stringify(old));assert.equal((await readBinding(state,source)).accountId,undefined);
  await registerAccount(state,ca);assert.equal((await readBinding(state,source)).targetThreadId,chatA);
- assert.equal(JSON.parse(await readFile(join(state,'bindings.json'),'utf8')).schemaVersion,2);
+ assert.equal(JSON.parse(await readFile(join(state,'bindings.json'),'utf8')).schemaVersion,3);
  assert.equal((await bind(state,root,ca,chatA)).connection.accountId,ca.accountId);
 }));
 test('a stale A packet cannot load or acquire after B is selected; a channel changed with no task also invalidates old packets',()=>fixture(async({base,root,state})=>{

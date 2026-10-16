@@ -8,7 +8,7 @@ export async function checkPackage(root=packageRoot){
  const version=process.versions.node.split('.').map(Number);
  if(process.arch!=='x64'||version[0]!==24||version[1]<18)throw new Error('NODE_24_18_OR_LATER_24_X_X64_REQUIRED');
  const manifest=JSON.parse(await fs.readFile(path.join(root,'PACKAGE-MANIFEST.json'),'utf8'));
- if(manifest.version!=='0.3.10'||!manifest.files||Object.keys(manifest.files).length>1000)throw new Error('INVALID_PACKAGE_MANIFEST');
+ if(manifest.version!=='0.3.11'||!manifest.files||Object.keys(manifest.files).length>1000)throw new Error('INVALID_PACKAGE_MANIFEST');
  for(const [relative,expected] of Object.entries(manifest.files)){
   if(relative.includes('\\')||relative.startsWith('/')||relative.split('/').some(s=>!s||s==='..'||s==='.')||!/^[a-f0-9]{64}$/.test(expected))throw new Error('INVALID_PACKAGE_MANIFEST');
   const target=path.resolve(root,relative),base=path.resolve(root);

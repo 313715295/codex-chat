@@ -8,11 +8,11 @@ const packageRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 export async function buildPlugin(destination,{resultConnection=null,requireResultsConnection=false}={}){
   if(requireResultsConnection&&!resultConnection)throw new Error('REGISTERED_RESULTS_CONNECTION_REQUIRED');
   const connection=resultConnection?validateResultConnection(resultConnection):null;
-  const manifest={$schema:'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',name:'codex-chat-delegation',version:'0.3.10',description:'向指定 Chat 传送请求、材料并取回结果与文件；使用者决定任务内容，生图可选逐条发送'};
+  const manifest={$schema:'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',name:'codex-chat-delegation',version:'0.3.11',description:'向指定 Chat 传送请求、材料并取回结果与文件；使用者决定任务内容，生图可选逐条发送'};
   if(connection)manifest.extensions={'com.openai':{apps:'./.app.json'}};
   const files={
     'plugin.json':JSON.stringify(manifest,null,2)+'\n',
-    'STATUS.json':JSON.stringify({orchestrationImplemented:true,host:'Codex desktop with native messaging tools',invocation:'only within Chat collaboration or file exchange permitted by user instructions or applicable user-authorized project rules',serviceOwnership:'each user initializes and owns a private result service',frameworkSharedBackend:false,personalResultsMappingIncluded:!!connection,portableAcrossAccounts:!connection,resultsConnection:connection?'personal registered MCP mapping; do not distribute to friends':'initialize or reuse the current account own private service',registeredResultsConnectionIncluded:!!connection,consumerAccountConnected:false,crossAccountAccessVerified:false,publicDirectorySubmissionReady:false,materialDelivery:'Codex sends text or selected attachments; Chat requests missing material through needs_materials',chatExtraSkillRequired:false,modelApiUsedDuringWait:false,backgroundIdleWakeImplemented:false,friendEndToEndAcceptancePassed:false},null,2)+'\n'
+    'STATUS.json':JSON.stringify({orchestrationImplemented:true,standaloneOrchestrationMcp:false,multiChat:'same-account distinct targets with independent task state',host:'Codex desktop with native messaging tools',invocation:'only within Chat collaboration or file exchange permitted by user instructions or applicable user-authorized project rules',serviceOwnership:'each user initializes and owns a private result service',frameworkSharedBackend:false,personalResultsMappingIncluded:!!connection,portableAcrossAccounts:!connection,resultsConnection:connection?'personal registered MCP mapping; do not distribute to friends':'initialize or reuse the current account own private service',registeredResultsConnectionIncluded:!!connection,consumerAccountConnected:false,crossAccountAccessVerified:false,publicDirectorySubmissionReady:false,materialDelivery:'Codex sends text or selected attachments; Chat requests missing material through needs_materials',chatExtraSkillRequired:false,modelApiUsedDuringWait:false,backgroundIdleWakeImplemented:false,friendEndToEndAcceptancePassed:false},null,2)+'\n'
   };
   if(connection){
     files['.app.json']=JSON.stringify({apps:{'codex-chat-results':{id:connection.registeredMcpId}}},null,2)+'\n';
@@ -22,6 +22,7 @@ export async function buildPlugin(destination,{resultConnection=null,requireResu
     'skills/codex-chat-delegate/SKILL.md':'skill/codex-chat-delegate/SKILL.md',
     'skills/codex-chat-delegate/agents/openai.yaml':'skill/codex-chat-delegate/agents/openai.yaml',
     'skills/codex-chat-delegate/references/host-entry.md':'skill/codex-chat-delegate/references/host-entry.md',
+    'skills/codex-chat-delegate/references/requests.md':'skill/codex-chat-delegate/references/requests.md',
     'skills/codex-chat-delegate/scripts/host-runtime.js':'source/collaboration/host-runtime.js',
     'skills/codex-chat-delegate/scripts/job-entry.js':'source/collaboration/job-entry.js',
     'skills/codex-chat-delegate/scripts/result-connection.mjs':'source/collaboration/result-connection.mjs',

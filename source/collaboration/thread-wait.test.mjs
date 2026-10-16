@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {prepareDelegation,packetDigest} from './prepare.mjs';
 const api=new Function('return ('+await readFile(new URL('./host-runtime.js',import.meta.url),'utf8')+')')();
 const thread='11111111-1111-4111-8111-111111111111',receipt='22222222-2222-4222-8222-222222222222';
-function fixture({busy=false,wrong=false,stale=false,failed=false,missing=false,loseAck=false,probeError=false,readyAt=0}={}){
+function fixture({busy=false,wrong=false,stale=false,failed=false,missing=false,loseAck=false,probeError=false,userOnly=false,readyAt=0}={}){
  const packet=prepareDelegation({taskId:'thread-wait-fixture',goal:'Review synthetic arithmetic only',kind:'review'},
    {schemaVersion:1,targetThreadId:thread,authorizedRoot:'fixture-root',workspaceId:'fixture-workspace'});
  let time=10000;const messages=[],reads=[],gets=[],states=[];
@@ -18,7 +18,7 @@ function fixture({busy=false,wrong=false,stale=false,failed=false,missing=false,
    const n=messages.length-1,start=messages[n].at/1000+(stale?-100:0);
    return {thread:{id:thread,kind:'chatgpt',status:{type:busy?'running':'idle'},updatedAt:start+2},
     turns:[{id:'turn-'+n,status:failed?'failed':busy?'inProgress':'completed',error:failed?{message:'fixture failure'}:null,
-      startedAt:start,completedAt:busy?null:start+2,items:[{type:'userMessage',content:[{type:'text',text:wrong?'unrelated task':messages[n].prompt}]}]}]};
+      startedAt:start,completedAt:busy?null:start+2,items:[{type:'userMessage',content:[{type:'text',text:wrong?'unrelated task':messages[n].prompt}]},...(!userOnly?[{type:'agentMessage',text:'Synthetic response'}]:[])]}]};
   },
   publishAssignment:async()=>({status:'stored',taskId:packet.assignment.taskId,materialMode:'external',assignmentReceipt:receipt}),
   sendMessage:async({prompt})=>{messages.push({prompt,at:time});if(loseAck&&messages.length===2)throw new Error('lost acknowledgement');return {isError:false};},
@@ -97,6 +97,13 @@ test('a previously sent packet without a new turn anchor is recovered by fallbac
 });
 
 const resultFirst=options=>({...options,waitStrategy:'result',completionFallback:true,pollIntervalMs:30000});
+
+test('a user-only completed placeholder never triggers an existing-result reminder; result polling continues',async()=>{
+ const f=fixture({userOnly:true,readyAt:Infinity}),out=await api.delegateAndWait(f.packet,f.host,resultFirst(f.options));
+ assert.equal(out.status,'timeout');assert.equal(f.messages.length,1);assert.equal(out.metrics.fallbackChecks,2);assert.equal(out.metrics.automaticResultMessagesSent,0);
+ const g=fixture({userOnly:true,readyAt:340000}),ready=await api.delegateAndWait(g.packet,g.host,resultFirst(g.options));
+ assert.equal(ready.status,'completed');assert.equal(g.messages.length,1);assert.equal(ready.metrics.automaticResultMessagesSent,0);
+});
 
 test('a target system error stops before publishing or sending a new task',async()=>{
  const f=fixture();f.host.readThread=async()=>({thread:{id:thread,kind:'chatgpt',status:{type:'systemError'}}});

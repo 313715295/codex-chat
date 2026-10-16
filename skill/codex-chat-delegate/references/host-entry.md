@@ -1,50 +1,41 @@
 # 宿主调用
 
-多账号：首次用 host-runtime.js 的 discoverAccount(tools, ALL_TOOLS, {projectId})，通过原生 get_site 核实 owner-private 和所有者账号，并用只读 get_task_result 探针独立取得同一 MCP 地址的实际连接身份与工具前缀。账号 ID 与服务内 principalId 是不同的标识，不互相推导。只把返回的白名单连接对象保存为本机文件，再用 prepare.mjs account-register <文件> [显示名称] 登记；用户不填写这些字段。
+私人 MCP 已直接暴露任务、附件和结果工具；原生消息接口由 Codex 桌面提供。完整编排需要宿主注入 tools / ALL_TOOLS。当前没有可验证的独立 MCP→宿主回调入口，因此保留这个薄入口，不复制凭据或增加模型代理。job-entry.js 的 describe() 提供共同规则和参数；无宿主桥接时在操作前返回 HOST_BRIDGE_REQUIRED。
 
-账号登录变化或不确定时，先将 prepare.mjs accounts 返回的 accounts 交给 resolveCurrentAccount(tools, ALL_TOOLS, accounts)。程序只读核验已保存服务及对应 Chat，唯一匹配时返回当前账号与保存的绑定；Codex 用 account-switch 恢复该账号。needsConnectionUpdate=true 时先保存返回的白名单连接并 account-register 更新正式前缀。未匹配时引导本人登录/首次配置，不猜账号；多个匹配时核对目标。整个解析不发送消息、上传材料或改变平台设置。
+## 账号与目标
 
-用 account-bind <accountId> <Chat URL> <材料目录> 给本 Codex 保存该账号的绑定。以后 accounts 列出已保存账号及各自 Chat/目录；用户要求换账号时，先核实该账号当前服务和 Chat 可用，再用 account-switch <accountId> 恢复已有绑定。新账号未配置时走首次初始化，已有账号复用固定地址。切换本机配置不完成平台登录；登录或安全确认由本人完成。程序每次进入均检查实际当前身份，所有结果与附件响应也校验同一地址和 principalId。
+首次连接见 [通道初始化](own-results-setup.md)。已配置账号用 prepare.mjs accounts 获取保存记录，交给 host-runtime.js 的 resolveCurrentAccount(tools, ALL_TOOLS, accounts) 独立核验当前 owner-private 服务、MCP 地址与实际连接身份。唯一匹配后 account-switch；needsConnectionUpdate 时保存返回的白名单连接再 account-register。不猜账号归属，登录或安全确认由本人完成。
 
-旧 schema 1 自动迁移到 schema 2，但不猜账号归属，不改旧目标。核实原账号后用 account-register/account-bind 补上身份。新的 CLI prepare 必须已有账号连接；旧的已发送任务保留原包续等，不强行换账号。每个 Codex 在不同账号保存一份 Chat/目录，切换不覆盖原配置；任一待完成任务阻止切换或更改通道。结果包固定账号、服务和 Chat，旧账号的包不能在新账号下加载或取结果。unbind 只移除当前账号绑定，其他账号保留。
+按桌面会话名用原生列表/读取核实 Chat；重名时核对项目。用户不提供内部 ID。默认绑定用 account-bind / bind，新增并行目标用 prepare.mjs target-bind <精确 Chat URL> [材料目录] [显示名称]；省略目录沿用当前授权范围。targets 列出本 Codex 在当前账号的目标、默认目标和待办。每个目标单独保存材料目录，目录可以相同；target-remove 不能移除有待办或暂停任务的目标。
 
-用户要求暂停旧协作并更换 Chat 或账号时，先停止正在运行的工具等待，再用 prepare.mjs pause <原 packet.json>。只有 waiter 已退出的待办可暂停；程序原子保存其账号、通道、目标和执行占用，原任务包、状态及回执不变，不标为完成，不发送远端消息。随后仍须核实当前账号；同账号更换 Chat 用 bind，账号切换用 account-switch/account-bind。未指定新材料目录时沿用当前授权范围。accounts 会列出本 Codex 的暂停任务。暂停的 Chat 和任务编号继续保留，不能插入新任务。用户要求恢复时，用 prepare.mjs resume <原 packet.json> 恢复原绑定和待办，再核对当前账号并按原 packetPath 续等；不会重发委托。超时或 systemError 本身不自动暂停或释放占用。
+多目标请求在 request 中加入 targetThreadId，单目标省略则沿用原默认绑定。每项固定账号、Chat、授权目录、任务版本与回执。不同 Chat 可并行，同一 Chat 仍独占；另一个 Codex 不能复用这个 Chat。账号切换及默认绑定变更仍受待办保护。
 
-## 统一入口
-
-按 [请求写法](requests.md) 由 Codex 生成请求文件。业务目标与传输协议分开：程序自动附上本轮需要的提交/附件说明，不重复手写工具调用流程。用户另行要求取回已有图或文件时使用普通 receiveAttachments 请求，明确不重新生成；默认生图队列仍只发送指令。
-
-一次 functions.exec 中加载并运行 scripts/job-entry.js，不把完整源码打印进模型上下文。普通任务自动 prepare/load、核对账号与目标、获取执行锁、传材料、发消息、等待、下载校验和清理。生图入口不加载附件 IO，不登记远程任务或查询正式结果；沿用当前账号绑定，通过平台所有者核验、原生 read_thread 和执行锁检查后发送。用户许可已经覆盖本次协作时，deliveryAuthorized=true；不会改变审批设置或读取登录凭据。
+## 同一程序执行
 
 ```javascript
 // @exec: {"yield_time_ms": 60000, "max_output_tokens": 1500}
 const scriptRoot = '已安装 skill 的 scripts 绝对路径';
-const read = await tools.exec_command({cmd: 'Get-Content -LiteralPath '+"'"+(scriptRoot+'/job-entry.js').replaceAll("'","''")+"'"+' -Raw', max_output_tokens: 10000});
+const read = await tools.exec_command({cmd: 'Get-Content -LiteralPath '+"'"+(scriptRoot+'/job-entry.js').replaceAll("'","''")+"'"+' -Raw', max_output_tokens: 16000});
 if (read.exit_code !== 0) throw new Error('ENTRY_NOT_AVAILABLE');
 const entry = new Function('return (\n'+read.output+'\n)')();
 const report = await entry.run(tools, ALL_TOOLS, {
-  scriptRoot, requestPath: '请求文件绝对路径', outputRoot: '本任务独立下载目录',
-  deliveryAuthorized: true,
-  onProgress: event => notify(event)
+  scriptRoot, requestPath: '请求文件绝对路径', outputRoot: '本任务独立输出目录',
+  deliveryAuthorized: true, onProgress: event => notify(event)
 });
 store('codex-chat-last-outcome', report);
-text({status:report.outcome.status, summary:report.outcome.result?.summary, sentCount:report.outcome.sentCount, instructionCount:report.outcome.instructionCount, chatUrl:report.outcome.chatUrl, downloads:report.outcome.downloads, cleanup:report.outcome.cleanup, metrics:report.metrics, recordPath:report.recordPath});
+text({status:report.outcome.status, summary:report.outcome.result?.summary,
+  downloads:report.outcome.downloads, cleanup:report.outcome.cleanup,
+  metrics:report.metrics, recordPath:report.recordPath, packetPath:report.packetPath});
 ```
 
-续等改传原 packetPath，不传 requestPath；从原状态恢复，不重发委托。sending/uncertain 保持不确定，不自动重试消息。只有正文、任务版本或必要材料变化才创建新 revision。旧自动取回图片包在统一入口返回 LEGACY_IMAGE_RETURN_DISABLED，保留原记录，不续发生图或导出。
+多 Chat 把 run 改为 runMany，公共 scriptRoot / deliveryAuthorized 保留，requestPath / outputRoot 改放 jobs 数组。每项提供 requestPath 或原 packetPath、独立且互不嵌套的 outputRoot，最多 8 项、必须是同一 Codex 和当前账号的已登记不同 Chat。程序先完成所有本地范围检查，串行提交桌面发送请求，再并行处理与等待；返回每项结果或错误及原包路径，一项失败不会丢弃其他项。使用 describe() 查看实际参数，不把整个实现读取到模型上下文。
 
-单条生图指令原样发送，收到原生回执即返回 sent；最后一轮可能仍在生成，generationVerified=false，用户在返回的 chatUrl 查看和下载。多条指令按顺序排队：仅在上一条原文、发送时间窗口（允许 2 秒时钟误差）和轮次 ID 对应，且同轮 completed、对话 idle 时发送下一条。程序约每 30 秒核对，最后一条送达即结束。不追加导出、上传或结果催交，不调用 get_task_result；轮次结束仅用于队列调度，不证明出图成功或数量正确。目标正在运行或状态不明时不插入第一条；超时/取消报告 sentCount 和 instructionCount，原包保留未发送项。每条发送前保存 sending，回执不明后停止队列，不重发。
+## 等待与恢复
 
-普通审核、规划、文字设计默认采用 result 策略：程序约每 30 秒查询 get_task_result，正式结果就绪立即收取；read_thread 仅用于启动时核对目标，以及每 5 分钟仍无结果时核对本次消息、发送时间窗口和对应轮次。确认该轮已完成但漏交时最多提醒提交一次，不重做任务；状态缺失、延迟或暂时报错不停止结果查询。旧版已发送包没有轮次锚点时只收取匹配结果，不猜轮次或重发。
+普通任务约每 30 秒查正式 get_task_result，每五分钟仍无结果时核对对应轮次，确认有助手回复、已完成且漏交时最多提醒一次。普通任务不预发能力探针。生图只按上一轮结束后逐条发送，最后一条送达即返回，用户自行下载；另行要求收取已有文件时使用普通文件请求。轻量查探只在已有状态不能解释异常且一次调用能消除疑问时使用，不反复试探。
 
-轻量查探主要用于图片参考材料或图片队列出现异常时：先看已有结果与对应轮次，只有能力仍不明确、且一次实际调用能帮助判断时，才在原协作范围内发送一次简短探针；已有明确缺项时直接报告，不重复探测。普通审核、规划不预发探针；启动时的账号、连接和目标检查由程序完成。探针只验证实际调用范围，文字结果提交成功不证明图像可见或音频可听；独立探针会增加一次 Chat 消息和推理，不是新的自动工具发现或后台唤醒功能。
+默认单次 10 分钟、最多 15 分钟，可设置 timeoutMs。所有空检查留在程序内，没有闲置事件唤醒；宿主续取仍可能触发模型响应。运行中的 cell 只用 functions.wait 续取。
 
-普通结果等待和图片队列都在同一程序内完成，没有变化继续等；没有实现闲置 Codex 的事件唤醒。
+超时用返回的原 packetPath 续等，不重发；sending/uncertain 保持不确定。确需补材料时沿用 taskId 并新建 revision。systemError 或工具缺失保留现场并报告阶段，不放宽认证、哈希、目录或回执检查。completed 只覆盖实际范围；生图 sent 仅为送达。
 
-程序默认等 10 分钟，每次最多 15 分钟，可按任务设置 timeoutMs；较短时限可能早于普通任务首次五分钟兜底。图片队列共用单次时限，不无限等待。实际间隔包含工具耗时，普通等待受输入附件原有到期时间限制；失败、取消或超时返回实际状态。空检查不返回模型。只用 functions.wait 续取同一 cell，不另开查询循环。上传、准备、下载与清理分别计入总耗时。
-
-下载采用最多 3 个只读请求预取、顺序写盘，桥接代码保持在 64,000 字节审查上限内；逐块与整文件校验、禁止覆盖、账号/任务绑定、附件清理保持。程序不关闭认证或证书校验，不用其他通道绕过工具拒绝。
-
-输出 outcome.json 包含状态及本次工具调用和耗时；图片队列记录逐条送达状态与轮次探针，普通任务记录消息、提交提醒、轮次探针、结果查询及五分钟兜底次数。程序等待不调用模型 API；宿主工具续取、状态反馈和最终展示可能仍使用 Codex 推理，用量按本会话真实日志统计，不把轮询数当模型请求数，也不把缓存输入当免费或未发生。
-
-普通任务 completed 只覆盖实际范围；生图 sent 仅表示全部指令送达，不表示生成、下载或校验通过。cleanup.pending 或 executionCleanup.pending 如实报告、同包恢复；图片队列全部送达后释放本地占用，部分发送后超时则保留占用，另一个任务或换账号不能抢占。
+需要暂停后切换时，先结束 waiter，再 pause <原包>。resume <原包> 恢复原任务；多目标任务恢复自己的路由，不替换其他待办和默认 Chat。旧单目标包保留原语义，恢复会恢复原绑定。暂停继续保留账号、Chat、目录与通道，不代表成功、不撤回远端消息；新任务不能抢占暂停的 Chat。schema 1/2 首次正常写入迁移到 3，保留旧账号、绑定与暂停记录。
