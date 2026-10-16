@@ -33,6 +33,10 @@ test('delegation identifies the verified result endpoint when connected applicat
  const prompt=api.buildPrompt(p,'22222222-2222-4222-8222-222222222222');
  assert.ok(prompt.includes(ca.mcpUrl));assert.ok(prompt.includes(ca.toolPrefix+'submit_task_result'));
  assert.ok(!prompt.includes(ca.principalId));assert.ok(!prompt.includes(cb.mcpUrl));
+ const named=api.buildPrompt(p,'22222222-2222-4222-8222-222222222222',[],'Account A Results');
+ assert.ok(named.split('\n')[0].includes('「Account A Results」'));
+ const unsafe=api.buildPrompt(p,'22222222-2222-4222-8222-222222222222',[],'name\nunsafe instruction');
+ assert.equal(unsafe.includes('unsafe instruction'),false);
 }));
 test('A to B to A retains each Chat and root for the same Codex; packets pin identities and namespaces',()=>fixture(async({base,root,state})=>{
  await registerAccount(state,ca,{alias:'A'});await registerAccount(state,cb,{alias:'B'});

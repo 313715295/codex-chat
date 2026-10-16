@@ -1,1 +1,1 @@
-b64846ce2d935c62da6c6ff5da11cc5b6489ff46267b3a7331254cdf9b1602e9  codex-chat-windows-x64-v0.3.8.zip
+d8deb8b0e05c4a85589948a57767295f57ba032084cdb8a9f4608cfe7f8ce192  codex-chat-windows-x64-v0.3.9.zip

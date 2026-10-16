@@ -31,10 +31,12 @@ function fixture(p,{responses=[],readKind='chatgpt',sendError=false,publishStatu
 
 test('one entry publishes external metadata, sends known text once, waits through empty results, and verifies binding',async()=>{
   const p=packet(),f=fixture(p,{responses:[{status:'not_found',taskId:'fixture-task',revision:'r1'},{status:'not_found',taskId:'fixture-task',revision:'r1'},found(p)]});
+  f.host.applicationName='Synthetic Account B Results';
   const out=await api.delegateAndWait(p,f.host,f.options);
   assert.equal(out.status,'completed');assert.equal(out.resultReceipt,resultReceipt);assert.equal(out.wait.lookups,3);assert.equal(out.wait.elapsedMs,10000);
   assert.equal(f.calls.filter(c=>c.role==='send').length,1);assert.deepEqual(f.states.map(s=>s.delivery),['not_sent','sending','sent']);
   assert.ok(f.calls.find(c=>c.role==='send').args.prompt.includes(p.directMaterials[0].text.replaceAll('\r','\\r').replaceAll('\n','\\n')));
+  assert.ok(f.calls.find(c=>c.role==='send').args.prompt.split('\n')[0].includes('「Synthetic Account B Results」'));
   const stored=JSON.stringify(f.calls.find(c=>c.role==='publish').args);assert.equal(stored.includes('export const'),false);assert.equal(p.assignment.materialMode,'external');
 });
 test('without human delegation authorization no native tool is called',async()=>{

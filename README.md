@@ -4,7 +4,7 @@
 
 ## 下载与使用
 
-**[下载 Windows x64 使用包 v0.3.8](https://github.com/313715295/codex-chat/releases/download/v0.3.8/codex-chat-windows-x64-v0.3.8.zip)** · [版本与校验值](https://github.com/313715295/codex-chat/releases/tag/v0.3.8)
+**[下载 Windows x64 使用包 v0.3.9](https://github.com/313715295/codex-chat/releases/download/v0.3.9/codex-chat-windows-x64-v0.3.9.zip)** · [版本与校验值](https://github.com/313715295/codex-chat/releases/tag/v0.3.9)
 
 把 ZIP 交给 Codex，告诉它安装位置、材料目录和目标 Chat 对话即可。以 Codex 会话为主，合作的 Chat 可以更换；旧任务可保留暂停，之后继续原任务。安装步骤和日常用法见 **[使用指南](docs/getting-started.md)**；ZIP 内的 README 与该指南内容相同。
 
