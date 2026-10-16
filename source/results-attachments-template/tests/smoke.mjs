@@ -23,6 +23,12 @@ const {POST}=await import('../app/mcp/route.ts');
 async function call(method,params={},user='test-owner'){const h={'Content-Type':'application/json'};if(user)h['oai-authenticated-user-id']=user;const r=await POST(new Request('https://fixture.invalid/mcp',{method:'POST',headers:h,body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}));return {status:r.status,body:await r.json()}}
 assert.equal((await call('initialize',{protocolVersion:'2025-06-18'})).body.result.protocolVersion,'2025-06-18');
 const inventory=(await call('tools/list',{},null)).body.result.tools;assert.ok(inventory.some(t=>t.name==='read_attachment_chunk'));assert.ok(inventory.some(t=>t.name==='submit_task_result'));
+assert.ok(inventory.some(t=>t.name==='get_collaboration_entry'));
+const entry=(await call('tools/call',{name:'get_collaboration_entry',arguments:{}})).body.result.structuredContent;
+assert.equal(entry.skillRequired,false);assert.match(entry.hostBootstrap,/entry-info\.mjs/);
+assert.equal(entry.channel.principalId,'test-owner');
+assert.equal((await call('tools/call',{name:'get_collaboration_entry',arguments:{}},null)).status,401);
+assert.equal((await call('tools/call',{name:'get_collaboration_entry',arguments:{path:'outside'}})).body.result.isError,true);
 for(const tool of inventory.filter(t=>t.outputSchema)){
  assert.ok(tool.outputSchema.properties.channel,'Account identity must be declared in every typed attachment response');
  const reply=(await call('tools/call',{name:tool.name,arguments:{}})).body.result.structuredContent;

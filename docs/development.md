@@ -1,6 +1,6 @@
 # 开发与构建
 
-维护入口为 source/collaboration、skill/codex-chat-delegate 与 source/results-attachments-template。不要提交运行绑定、账号映射、临时平台凭据或真实任务资料。
+维护入口为 source/collaboration、docs/codex 与 source/results-attachments-template。不要提交运行绑定、账号映射、临时平台凭据或真实任务资料。
 
 用户操作只维护 docs/getting-started.md，打包时原样生成 README.txt；根 README.md 仅作为项目与下载入口。不要另建重复的首次使用说明。
 
@@ -37,11 +37,11 @@ npm run build
 node scripts/release.mjs
 ```
 
-构建器先生成干净目录并检查个人配置，创建 SHA-256 文件清单，再生成 downloads 下的 ZIP 和外部校验值。ZIP 包含协作入口、skill、干净后台模板、许可证和首次使用说明，不包含 node_modules、历史 reader、个人状态或开发测试输出。
+构建器先生成干净目录并检查个人配置，创建 SHA-256 文件清单，再生成 downloads 下的 ZIP 和外部校验值。ZIP 包含协作程序、调用指南、干净后台模板、许可证和首次使用说明，不包含独立 skill，不包含 node_modules、历史 reader、个人状态或开发测试输出。
 
-打包使用 Windows PowerShell 和系统 .NET ZIP 支持，不需要额外 ZIP 程序。发布版本为 0.3.11；修改版本时同步安装/打包/插件清单与测试期望。推送对应 v 标签后，仓库 CI 先检查源码和后端构建，再核验已提交的 ZIP 与哈希，最后通过 GitHub Actions 临时令牌发布相同使用包；不在本机导出发布凭据。
+打包使用 Windows PowerShell 和系统 .NET ZIP 支持，不需要额外 ZIP 程序。发布版本为 0.3.12；修改版本时同步安装/打包/插件清单与测试期望。推送对应 v 标签后，仓库 CI 先检查源码和后端构建，再核验已提交的 ZIP 与哈希，最后通过 GitHub Actions 临时令牌发布相同使用包；不在本机导出发布凭据。
 
-源码 Install.cmd 仅更新已管理的本机 skill；使用包 Install.cmd 先验证 PACKAGE-MANIFEST.json。不可覆盖非本工具管理的已存在 skill。
+源码 Install.cmd 登记本机程序位置；使用包 Install.cmd 先验证 PACKAGE-MANIFEST.json。确认插件入口可用后，用 --retire-legacy-skill 自动备份并移除旧发现入口；保留兼容脚本及账号任务状态，不处理其他工具的 skill。
 
 ## 开源检查
 

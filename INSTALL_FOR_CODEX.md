@@ -1,13 +1,11 @@
 # Codex 安装入口
 
-执行前读取 skill/codex-chat-delegate/SKILL.md。使用用户已指定的安装位置、材料范围和桌面 Chat 会话名或链接；原生工具按名称定位，重名时核对项目或询问一次。不把安装目录默认当作材料目录。用户说明见使用包 README.txt 或仓库 docs/getting-started.md。
+使用用户指定的安装位置、材料范围和桌面 Chat 会话名；按原生列表核实目标，重名时核对项目。不把安装目录默认当作材料目录。用户说明见 README.txt 或 docs/getting-started.md。
 
-分享 ZIP 可由 Codex 核验并解压到新建的可写目录，无需用户事先解压。执行 source/collaboration/install-package.mjs --check，确认 Node 24.18 或以上的 24.x x64 与包内文件哈希，再执行同一安装入口。
+1. ZIP 可由 Codex 核验并解压到新建可写目录，用户无需先解压。执行 source/collaboration/install-package.mjs --check，核对 Node 24.18 或以上的 24.x x64 与文件哈希，再执行同一安装入口。源码副本使用 source/collaboration/install.mjs。
+2. 安装登记 %LOCALAPPDATA%/CodexChat/INSTALLATION.json 中的实际程序位置，不新增 skill，不启动服务或发送消息，不改权限。旧 skill 先保留，安装或绑定本身不产生协作许可。
+3. 按 docs/codex/own-results-setup.md 配置或复用本账号私人服务。已有服务没有 get_collaboration_entry 时，先核实 owner-private 归属，再按 Sites 流程更新对应源码的 MCP 入口和 lib/collaboration-entry.ts；保留其 project_id、存储、数据、固定地址及受众。缺平台能力时说明缺项，不使用作者共享后台或让用户猜 clientId。
+4. 独立核验连接身份，调用正式 get_collaboration_entry，运行它返回的 hostBootstrap，检查本机入口版本和 describe()。日常由该工具说明引导加载程序；参数见 docs/codex/requests.md，宿主示例见 docs/codex/host-entry.md。
+5. 新链路可用后，由 Codex 执行 install-package.mjs --retire-legacy-skill（源码副本执行 install.mjs 同选项），自动迁移本工具管理的旧 skill。发现文件移入本机备份；旧运行脚本保留兼容既有调用。其他工具或无归属标记的 skill 不处理，不删除绑定、账号、材料或暂停任务。用户无需手动卸载或编辑配置。
 
-源码开发副本使用 source/collaboration/install.mjs。安装不启动服务、不发送消息、不修改权限；安装与材料绑定本身不产生协作许可。
-
-服务首次配置遵照 skill/codex-chat-delegate/references/own-results-setup.md。当前账号拥有独立私人服务，固定连接由平台实际返回；缺 Sites 或应用连接能力时说明缺项，不退回作者共享后台，不要求用户猜 clientId，不改变安全或审批设置。
-
-先按通道初始化自动核验连接；实际需要本人登录、应用连接或平台确认时，再指出页面和具体动作。安装完成后按宿主支持方式刷新技能发现。
-
-已有自有服务和账号绑定先核实再复用，待完成任务不得抢占。不要把本机绑定、hosting project_id、发布凭据、聊天记录或实际任务资料放进公开包。
+本人只处理必要登录、平台连接或安全确认。首次配置后复用固定连接；现有待办不得抢占。不要将本机安装记录、账号映射、项目 ID、凭据、聊天或真实材料放进公开包。

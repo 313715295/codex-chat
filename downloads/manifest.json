@@ -1,8 +1,8 @@
 {
-  "version": "0.3.11",
-  "archive": "codex-chat-windows-x64-v0.3.11.zip",
-  "sizeBytes": 475777,
-  "sha256": "b857b4c3a141143a65396c9f6945a97e22eb523fc22f2babef68d83e4435ee16",
+  "version": "0.3.12",
+  "archive": "codex-chat-windows-x64-v0.3.12.zip",
+  "sizeBytes": 478825,
+  "sha256": "fbe222596df2eecb102282609920547e9d7ae48ff45b62467a42d8412951517b",
   "packageFiles": 163,
   "verifiedFiles": 162,
   "accountMappingIncluded": false,

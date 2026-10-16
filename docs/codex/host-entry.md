@@ -1,6 +1,6 @@
-# 宿主调用
+# Codex 宿主调用
 
-私人 MCP 已直接暴露任务、附件和结果工具；原生消息接口由 Codex 桌面提供。完整编排需要宿主注入 tools / ALL_TOOLS。当前没有可验证的独立 MCP→宿主回调入口，因此保留这个薄入口，不复制凭据或增加模型代理。job-entry.js 的 describe() 提供共同规则和参数；无宿主桥接时在操作前返回 HOST_BRIDGE_REQUIRED。
+私人 MCP 的 get_collaboration_entry 提供发现与调用说明，原生消息接口由 Codex 桌面提供；无需安装或读取 skill。完整编排仍在宿主内注入 tools / ALL_TOOLS，远程服务不会自行回调桌面。job-entry.js 的 describe() 提供共同规则和参数；缺桥接时在操作前返回 HOST_BRIDGE_REQUIRED。
 
 ## 账号与目标
 
@@ -14,10 +14,8 @@
 
 ```javascript
 // @exec: {"yield_time_ms": 60000, "max_output_tokens": 1500}
-const scriptRoot = '已安装 skill 的 scripts 绝对路径';
-const read = await tools.exec_command({cmd: 'Get-Content -LiteralPath '+"'"+(scriptRoot+'/job-entry.js').replaceAll("'","''")+"'"+' -Raw', max_output_tokens: 16000});
-if (read.exit_code !== 0) throw new Error('ENTRY_NOT_AVAILABLE');
-const entry = new Function('return (\n'+read.output+'\n)')();
+// 先使用 get_collaboration_entry 返回的 hostBootstrap，得到 bundle 与 entry。
+const scriptRoot = bundle.info.scriptRoot;
 const report = await entry.run(tools, ALL_TOOLS, {
   scriptRoot, requestPath: '请求文件绝对路径', outputRoot: '本任务独立输出目录',
   deliveryAuthorized: true, onProgress: event => notify(event)
@@ -29,6 +27,8 @@ text({status:report.outcome.status, summary:report.outcome.result?.summary,
 ```
 
 多 Chat 把 run 改为 runMany，公共 scriptRoot / deliveryAuthorized 保留，requestPath / outputRoot 改放 jobs 数组。每项提供 requestPath 或原 packetPath、独立且互不嵌套的 outputRoot，最多 8 项、必须是同一 Codex 和当前账号的已登记不同 Chat。程序先完成所有本地范围检查，串行提交桌面发送请求，再并行处理与等待；返回每项结果或错误及原包路径，一项失败不会丢弃其他项。使用 describe() 查看实际参数，不把整个实现读取到模型上下文。
+
+本机安装记录为 %LOCALAPPDATA%/CodexChat/INSTALLATION.json，登记实际 packageRoot、scriptRoot 与 Node 路径。entry-info.mjs --host-bundle 只读返回本机入口；请求字段见 bundle.info.guides.requests。首次安装用包内 INSTALL_FOR_CODEX.md。
 
 ## 等待与恢复
 

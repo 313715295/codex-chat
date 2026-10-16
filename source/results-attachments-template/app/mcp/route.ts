@@ -6,6 +6,7 @@ import { events } from '../../lib/events';
 import { tools, validate } from '../../lib/protocol';
 import { getReview, submitReview } from '../../lib/reviews';
 import { attachmentTools, attachmentCall } from '../../lib/attachments';
+import { collaborationEntryTool, collaborationEntry } from '../../lib/collaboration-entry';
 export const dynamic='force-dynamic';
 const headers={'Cache-Control':'no-store'};
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers});
@@ -39,14 +40,15 @@ export async function POST(req:Request) {
  if(body.method==='initialize') {
   const versions=['2024-11-05','2025-03-26','2025-06-18','2025-11-25','2026-07-28'];
   const requested=body.params?.protocolVersion;
-  return result(id,{protocolVersion:versions.includes(requested)?requested:'2025-06-18',capabilities:{tools:{listChanged:false}},serverInfo:{name:'codex-chat-result-test',version:'1.2.1-codex-materials'},instructions:'Transfer tasks, selected files and results; the caller decides the work. Keep exact taskId/revision/assignmentReceipt: concurrent tasks never share receipts. materialsRead lists actual INPUT evidence only; OUTPUT files use attachmentIds, with mapping in summary/findings.message. Missing material: needs_materials and specific requests. Do not search unrelated files or change permissions. Original-byte transfer does not prove image/audio perception. Saving a result neither messages nor wakes Codex. Legacy review tools accept synthetic data only.'});
+  return result(id,{protocolVersion:versions.includes(requested)?requested:'2025-06-18',capabilities:{tools:{listChanged:false}},serverInfo:{name:'codex-chat-result-test',version:'1.2.1-codex-materials'},instructions:'Codex desktop senders start with get_collaboration_entry; use the installed local host runtime, no separate skill. Chat receivers use task and attachment tools directly. Transfer tasks, selected files and results; the caller decides the work. Keep exact taskId/revision/assignmentReceipt: concurrent tasks never share receipts. materialsRead lists actual INPUT evidence only; OUTPUT files use attachmentIds, with mapping in summary/findings.message. Missing material: needs_materials and specific requests. Do not search unrelated files or change permissions. Original-byte transfer does not prove image/audio perception. Saving a result neither messages nor wakes Codex. Legacy review tools accept synthetic data only.'});
  }
  if(body.method==='ping')return result(id,{});
- if(body.method==='tools/list')return result(id,{tools:[...tools,...fileTools,...mediaTools,...assignmentTools,...attachmentTools],...(modern?{ttlMs:0,cacheScope:'private'}:{})});
+ if(body.method==='tools/list')return result(id,{tools:[collaborationEntryTool,...tools,...fileTools,...mediaTools,...assignmentTools,...attachmentTools],...(modern?{ttlMs:0,cacheScope:'private'}:{})});
  if(body.method!=='tools/call')return rpcError(id,-32601,'Method not found');
  const user=req.headers.get('oai-authenticated-user-id');
  if(!user)return json({error:'AUTHENTICATED_USER_REQUIRED'},401);
  const name=body.params?.name; const args=body.params?.arguments;
+ if(name===collaborationEntryTool.name){const value=collaborationEntry(args);return toolResult(id,value,value.status==='invalid_arguments');}
  if(attachmentTools.some(t=>t.name===name)) {
   const value=await attachmentCall(name,user,args);
   const bound={...value.structuredContent,channel};

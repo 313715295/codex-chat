@@ -112,28 +112,27 @@ test('tool discovery fails before effects when a host tool is missing or ambiguo
   const inventory=['mcp__codex_app__read_thread','mcp__codex_app__send_message_to_thread','service_a_publish_assignment','service_b_publish_assignment','service_a_get_task_result'].map(name=>({name}));
   assert.throws(()=>api.bindHost(Object.fromEntries(inventory.map(t=>[t.name,()=>{}])),inventory),/MISSING_OR_AMBIGUOUS/);
 });
-test('binding and installed entry use friend-local paths and do not overwrite an unrelated skill',async()=>{
+test('binding and installed runtime use friend-local paths without installing a skill',async()=>{
   const base=await mkdtemp(join(tmpdir(),'collaboration-entry-'));
   try{
     const root=join(base,'materials');await mkdir(root);
     const bound=await bindConversation('https://chatgpt.com/c/'+threadId,root,{base:join(base,'state'),codexThreadId:'00000000-0000-4000-8000-000000000001'});assert.equal(bound.targetThreadId,threadId);
     assert.throws(()=>chatId('https://chatgpt.com/c/'+threadId+'?token=x'));
-    const dest=join(base,'installed');const installed=await installEntry({destination:dest});assert.equal(installed.messageSent,false);assert.equal(installed.serviceStarted,false);
-    assert.ok(new Function('return (\n'+await readFile(join(dest,'scripts/host-runtime.js'),'utf8')+'\n)')().delegateAndWait);
-    await installEntry({destination:dest});
-    const other=join(base,'unrelated');await mkdir(other);await writeFile(join(other,'SKILL.md'),'existing');await assert.rejects(installEntry({destination:other}),/EXISTING_SKILL_NOT_OWNED/);assert.equal(await readFile(join(other,'SKILL.md'),'utf8'),'existing');
+    const dest=join(base,'installed'),skill=join(base,'legacy');const installed=await installEntry({installationDirectory:dest,skillDirectory:skill});assert.equal(installed.messageSent,false);assert.equal(installed.serviceStarted,false);assert.equal(installed.skillInstalled,false);
+    assert.ok(new Function('return (\n'+await readFile(join(installed.scriptRoot,'host-runtime.js'),'utf8')+'\n)')().delegateAndWait);
+    await assert.rejects(readFile(join(skill,'SKILL.md')),/ENOENT/);
+    await installEntry({installationDirectory:dest,skillDirectory:skill});
+    const other=join(base,'unrelated');await mkdir(other);await writeFile(join(other,'INSTALLATION.json'),JSON.stringify({managedBy:'someone-else'}));await assert.rejects(installEntry({installationDirectory:other}),/EXISTING_INSTALLATION_NOT_OWNED/);
   }finally{await rm(base,{recursive:true,force:true});}
 });
-test('portable Codex plugin carries the executable entry and does not claim copied account connections',async()=>{
+test('portable Codex plugin requires no skill and does not claim copied account connections',async()=>{
   const base=await mkdtemp(join(tmpdir(),'collaboration-plugin-'));
   try{
-    const built=await buildPlugin(base);assert.equal(built.fileCount,18);assert.equal(built.messageSent,false);
-    assert.equal(await readFile(join(base,'skills/codex-chat-delegate/references/requests.md'),'utf8'),await readFile(join(here,'../../skill/codex-chat-delegate/references/requests.md'),'utf8'));
-    assert.ok((await readFile(join(base,'skills/codex-chat-delegate/scripts/pack-own-results.mjs'),'utf8')).includes('packOwnResults'));
+    const built=await buildPlugin(base);assert.equal(built.fileCount,2);assert.equal(built.messageSent,false);
+    await assert.rejects(readFile(join(base,'skills/codex-chat-delegate/SKILL.md')),/ENOENT/);
     const manifest=JSON.parse(await readFile(join(base,'plugin.json'),'utf8'));assert.equal(manifest.name,'codex-chat-delegation');
     const status=JSON.parse(await readFile(join(base,'STATUS.json'),'utf8'));assert.equal(status.chatExtraSkillRequired,false);assert.equal(status.modelApiUsedDuringWait,false);assert.equal(status.friendEndToEndAcceptancePassed,false);
-    const generatedApi=new Function('return (\n'+await readFile(join(base,'skills/codex-chat-delegate/scripts/host-runtime.js'),'utf8')+'\n)')();
-    const p=packet(),f=fixture(p,{responses:[found(p)]});assert.equal((await generatedApi.delegateAndWait(p,f.host,f.options)).status,'completed');assert.equal(f.calls.some(c=>c.role==='send'),false);
+    assert.equal(status.skillRequired,false);assert.equal(status.entryTool,'get_collaboration_entry');
     await assert.rejects(buildPlugin(base),/EEXIST/);
   }finally{await rm(base,{recursive:true,force:true});}
 });

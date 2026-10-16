@@ -72,7 +72,7 @@ test('current share package is complete, excludes retired local service entries 
  const base=await mkdtemp(join(tmpdir(),'friend-files-package-'));
  try {
   const output=join(base,'package');const built=await buildFriendPackage(output);
-  assert.equal(built.version,'0.3.11');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
+  assert.equal(built.version,'0.3.12');assert.equal(built.accountMappingIncluded,false);assert.equal(built.credentialsIncluded,false);
   const manifest=JSON.parse(await readFile(join(output,'PACKAGE-MANIFEST.json'),'utf8'));
   assert.equal(manifest.friendEndToEndAcceptancePassed,false);
   assert.equal(manifest.acceptance.multiAccountReal,'deferred_by_user');
@@ -86,14 +86,16 @@ test('current share package is complete, excludes retired local service entries 
   assert.ok(Object.keys(manifest.files).every(p=>!p.startsWith('source/reader/')&&!p.startsWith('skill/codex-chat-reader/')&&!p.endsWith('.exe')));
   assert.equal((await checkPackage(output)).verifiedFiles,Object.keys(manifest.files).length);
   const installer=await import(pathToFileURL(join(output,'source/collaboration/install.mjs')).href);
-  const destination=join(base,'installed-skill');
-  const installed=await installer.installEntry({destination});
+  const destination=join(base,'installed-runtime');
+  const installed=await installer.installEntry({installationDirectory:destination,skillDirectory:join(base,'no-skill')});
   assert.equal(installed.serviceStarted,false);assert.equal(installed.messageSent,false);assert.equal(installed.permissionsChanged,false);
-  assert.equal(await readFile(join(destination,'scripts/pack-own-results.mjs'),'utf8'),await readFile(join(output,'source/collaboration/pack-own-results.mjs'),'utf8'));
-  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.11');
+  assert.equal(installed.scriptRoot,join(output,'source/collaboration'));
+  assert.equal(JSON.parse(await readFile(join(destination,'INSTALLATION.json'),'utf8')).version,'0.3.12');
+  assert.ok(Object.keys(manifest.files).every(p=>!p.startsWith('skill/')&&!p.startsWith('skills/')));
+  assert.ok(manifest.files['docs/codex/requests.md']);
   // Exercise the actually installed helpers; exporting a function alone is not acceptance.
-  const installedBindings=await import(pathToFileURL(join(destination,'scripts/bindings.mjs')).href);
-  const installedPrepare=await import(pathToFileURL(join(destination,'scripts/prepare.mjs')).href);
+  const installedBindings=await import(pathToFileURL(join(installed.scriptRoot,'bindings.mjs')).href);
+  const installedPrepare=await import(pathToFileURL(join(installed.scriptRoot,'prepare.mjs')).href);
   const account={schemaVersion:2,source:'openai-sites:get_site',projectId:'package-fixture',siteRole:'owner',registeredMcpId:'plugin_asdk_app_fixture',mcpUrl:'https://fixture.example/mcp',oauthResource:'https://fixture.example/mcp',accountId:'package-account',principalId:'package-principal',toolPrefix:'mcp__fixture_'};
   const source='00000000-0000-4000-8000-000000000001',oldChat='00000000-0000-4000-8000-000000000101',newChat='00000000-0000-4000-8000-000000000102';
   const state=join(base,'isolated-state'),materials=join(base,'materials');await mkdir(materials);
